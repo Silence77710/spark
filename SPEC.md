@@ -41,12 +41,36 @@
  
  状态枚举：`seed` | `sprout` | `growing` | `realized` | `archived` | `dormant`
  
- 时间线记录独立表（可选 V1 扩展，暂不实现）。
+时间线记录独立表（可选 V1 扩展，暂不实现）。
  
  ---
  
  ## 三、功能规格
  
+### idea_activities 表
+
+| 字段 | 类型 | 约束 | 说明 |
+|------|------|------|------|
+| id | VARCHAR(36) | PK | 唯一标识 |
+| idea_id | VARCHAR(36) | FK → ideas.id ON DELETE CASCADE | 所属想法 |
+| type | VARCHAR(20) | NOT NULL, DEFAULT 'general' | 活动类型 |
+| content | TEXT | NOT NULL | 活动描述 |
+| created_at | DATETIME(3) | NOT NULL | 记录时间 |
+
+活动类型枚举（一期）：`capture` | `status_change` | `note` | `research` | `discussion` | `prototype` | `decision` | `reference` | `general`
+
+**自动记录规则**：
+- 捕获想法时自动生成 `capture` 类型活动
+- 状态变更时自动生成 `status_change` 类型活动，记录"从 X 变为 Y"
+
+---
+
+## 三、功能规格
+
+### 3.1 闪电捕获
+
+捕获时自动在活动时间线中记录一条"捕获了想法「标题」"的活动。
+
  ### 3.1 闪电捕获
  
  - **入口**：主页（想法流）顶部，固定输入框
@@ -74,6 +98,12 @@
  - **编辑模式**：标题和内容可编辑，保存后回到详情页
  - **返回**：返回列表页
  
+**活动时间线**：详情页底部展示活动时间线，包含：
+  - 自动记录：捕获活动、状态变更活动
+  - 手动记录：通过底部输入框添加，可选活动类型（笔记/调研/讨论/原型/决策/参考/一般）
+  - 时间线按时间倒序排列，每条显示类型图标、内容、相对时间
+  - 输入框支持 ⌘+↵ 快捷发送
+
  ### 3.4 基础搜索
  
  - **入口**：列表页顶部搜索框

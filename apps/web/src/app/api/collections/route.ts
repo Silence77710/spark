@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { getDb, releaseDb, IdeaRow } from "@spark/db";
+import { getDb, releaseDb, IdeaRow, RowDataPacket } from "@spark/db";
 
 export async function GET() {
   const conn = await getDb();

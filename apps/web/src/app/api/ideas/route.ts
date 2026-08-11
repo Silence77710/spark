@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getDb, releaseDb, IdeaRow } from "@spark/db";
+import { getDb, releaseDb, IdeaRow, ActivityRow, RowDataPacket } from "@spark/db";
 import { generateId } from "@spark/utils";
 
 export async function GET(request: NextRequest) {
@@ -65,6 +65,13 @@ export async function POST(request: NextRequest) {
     const [rows] = await conn.query<IdeaRow[] & RowDataPacket[]>(
       "SELECT * FROM ideas WHERE id = ?", [id]
     );
+
+    // Auto-log capture activity
+    await conn.query(
+      "INSERT INTO idea_activities (id, idea_id, type, content, created_at) VALUES (?, ?, ?, ?, ?)",
+      [generateId(), id, "capture", `捕获了想法「${title.trim()}」`, now]
+    );
+
     return NextResponse.json(rows[0], { status: 201 });
   } finally {
     releaseDb(conn);

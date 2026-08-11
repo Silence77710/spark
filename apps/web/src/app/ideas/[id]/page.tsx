@@ -4,6 +4,7 @@ import { useState, useEffect, use } from "react";
 import { useRouter } from "next/navigation";
 import { formatRelativeTime } from "@spark/utils";
 import { MarkdownPreview } from "@/components/markdown";
+import ActivityTimeline from "@/components/activity-timeline";
 
 interface Idea {
   id: string; title: string; content: string; status: string;
@@ -304,6 +305,11 @@ export default function IdeaDetailPage({ params }: { params: Promise<{ id: strin
               </div>
             )}
           </div>
+        </div>
+
+        {/* Activity Timeline */}
+        <div className="border-t border-[#f0f0f0] px-5 py-4">
+          <ActivityTimeline ideaId={id} />
         </div>
       </div>
 

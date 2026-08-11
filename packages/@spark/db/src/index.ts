@@ -1,4 +1,6 @@
-import mysql, { Pool, PoolConnection } from "mysql2/promise";
+import mysql, { Pool, PoolConnection, RowDataPacket } from "mysql2/promise";
+export type { RowDataPacket };
+
 
 const pool: Pool = mysql.createPool({
   host: "127.0.0.1",
@@ -28,4 +30,12 @@ export interface IdeaRow {
 
 export function releaseDb(conn: PoolConnection): void {
   conn.release();
+}
+
+export interface ActivityRow {
+  id: string;
+  idea_id: string;
+  type: string;
+  content: string;
+  created_at: string;
 }
