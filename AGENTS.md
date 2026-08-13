@@ -4,13 +4,22 @@
  
  ## 项目信息
  
- - **项目名称**：Spark — 想法操作系统
- - **项目等级**：S1（工具级，V1 MVP 阶段；计划升级至 S2）
- - **项目类型**：fullstack（Next.js + SQLite 本地优先）
- - **额外启用规范**：（暂不启用，随项目升级逐步引入）
- - **启用的 Skills**：writing-commit-messages, reviewing-code, systematic-debugging, grill-me, grill-with-docs, to-tickets, triage, domain-modeling, grilling, implement, wayfinder, research, wizard, code-review, diagnose-bugs, improve-codebase-architecture, teach, wait-what, handoff, setup-matt-pocock-skills
- 
- ## 规范引用
+- **项目名称**：Spark — 想法操作系统
+- **项目等级**：S1（工具级，V1 MVP 阶段；计划升级至 S2）
+- **项目类型**：fullstack（Next.js + MySQL）
+- **额外启用规范**：（暂不启用，随项目升级逐步引入）
+- **启用的 Skills**：writing-commit-messages, reviewing-code, systematic-debugging, grill-me, grill-with-docs, to-tickets, triage, domain-modeling, grilling, implement, wayfinder, research, wizard, code-review, diagnose-bugs, improve-codebase-architecture, teach, wait-what, handoff, setup-matt-pocock-skills
+
+## 文档同步（硬规则）
+
+代码或业务发生变更时，必须在同一次变更中同步更新受影响的文档。文档与代码不一致视为缺陷（bug）。
+
+- 技术栈、数据存储、目录结构、运行方式变化 → 更新 AGENTS.md
+- 功能规格、数据模型、交互行为变化 → 更新 SPEC.md
+- 产品定位、版本范围、设计哲学变化 → 更新 PRODUCT.md
+- 提交前自检：对照 `git diff`，凡涉及上述行为的，确认对应文档已同步
+
+## 规范引用
  
  本规范遵循 PSES（Personal Software Engineering Standard）。
  
@@ -93,37 +102,49 @@
  
  | 层面 | 技术选型 | 来源 |
  |------|---------|------|
- | 前端框架 | Next.js (App Router) | 产品定义 |
- | 样式 | Tailwind CSS + shadcn/ui | 产品定义 |
- | 数据存储 | SQLite (better-sqlite3) | 产品定义 |
- | 图谱渲染 | D3.js 或 vis-network | 产品定义 |
- | 包管理 | pnpm (参考 frontend-scaffold 结构) | 参考同级项目 |
- | 后端服务 | 暂无需；需要时从 service-scaffold 复制 | 参考同级项目 |
- 
- ## 项目结构
- 
+| 前端框架 | Next.js (App Router) | 产品定义 |
+| 样式 | Tailwind CSS + shadcn/ui | 产品定义 |
+| 数据存储 | MySQL 8（本机 spark-mysql 容器，库 spark，mysql2 连接池） | 代码现状 |
+| 图谱渲染 | D3.js 或 vis-network | 产品定义 |
+| 包管理 | pnpm (参考 frontend-scaffold 结构) | 参考同级项目 |
+| 后端服务 | 暂无需；需要时从 service-scaffold 复制 | 参考同级项目 |
+
+## 运行方式
+
+数据库为本机 `spark-mysql` Docker 容器（MySQL 8，端口 3306）中的 `spark` 库。连接配置见 `packages/@spark/db`，默认 `127.0.0.1:3306`，可用环境变量 `MYSQL_HOST` / `MYSQL_PORT` / `MYSQL_USER` / `MYSQL_PASSWORD` / `MYSQL_DATABASE` 覆盖。
+
+```bash
+# 本地开发
+pnpm install
+pnpm dev          # http://localhost:3000
+
+# 本地镜像运行（生产模式，容器通过 host.docker.internal 连 spark-mysql）
+docker build -t spark-web:local .
+docker run -d --name spark-web -p 3000:3000 \
+  -e MYSQL_HOST=host.docker.internal \
+  spark-web:local
+```
+
+## 项目结构
+
  ```
  spark/
  ├── AGENTS.md              # 本文件
- ├── PRODUCT.md              # 产品定义文档
- ├── README.md              # 项目说明
- ├── CHANGELOG.md           # 变更记录
- ├── apps/                  # 应用（参考 frontend-scaffold 结构）
+ ├── PRODUCT.md             # 产品定义文档
+ ├── SPEC.md                # V1 规格文档
+ ├── Dockerfile             # 本地镜像构建（生产运行）
+ ├── apps/                  # 应用
  │   └── web/               # Next.js 主应用
- ├── packages/              # 共享包（参考 frontend-scaffold 结构）
+ ├── packages/              # 共享包
  │   └── @spark/            # 共享模块
  │       ├── ui/            # 通用组件
  │       ├── utils/         # 工具函数
- │       └── db/            # 数据层（SQLite）
- ├── server/                # 后端服务（V1 不需要，后续从 service-scaffold 复制）
+ │       └── db/            # 数据层（mysql2 连接池，MySQL）
  ├── .cursor/
  │   └── skills/            # 项目级 Skills
  ├── package.json
  ├── pnpm-workspace.yaml
- ├── tsconfig.json
- ├── next.config.ts
- ├── tailwind.config.ts
- └── .env.example
+ └── tsconfig.json
  ```
  
  ## AI 行为约束
@@ -162,8 +183,9 @@
  3. 分析需求，确认修改范围
  4. 如果修改涉及"需要确认"的项，先询问
  5. 执行修改
- 6. 按 S1 等级要求进行基本检查（代码风格、错误处理、日志）
- 7. 提交或输出结果
+ 6. 同步更新受影响的文档（见「文档同步」硬规则）
+ 7. 按 S1 等级要求进行基本检查（代码风格、错误处理、日志）
+ 8. 提交或输出结果
  
  ## V1 阶段特别约束
  
@@ -173,6 +195,6 @@
  - 想法卡片列表（时间线视图）
  - 单个想法详情页（含状态、时间线）
  - 基础搜索
- - 本地存储（SQLite）
+ - MySQL 存储（本机 spark-mysql 容器的 spark 库）
  
  不允许超前实现 V2/V3 功能（图谱、回访、看板、自动关联等）。

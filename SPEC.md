@@ -12,7 +12,7 @@
  spark/
  ├── apps/web/          # Next.js (App Router) 主应用
  ├── packages/@spark/
- │   ├── db/            # SQLite 数据层 (better-sqlite3)
+ │   ├── db/            # MySQL 数据层（mysql2 连接池）
  │   ├── ui/            # 通用 UI 组件 (shadcn/ui)
  │   └── utils/         # 工具函数
  ├── package.json       # workspace root
@@ -21,7 +21,7 @@
  
  - 包管理器：pnpm
  - 样式：Tailwind CSS + shadcn/ui（默认 neutral 主题）
- - 数据库：better-sqlite3（纯本地，无网络依赖）
+ - 数据库：MySQL 8（本机 spark-mysql Docker 容器，库 spark；mysql2 连接池）
  
  ---
  
@@ -31,17 +31,18 @@
  
  | 字段 | 类型 | 约束 | 说明 |
  |------|------|------|------|
- | id | TEXT (UUID v7) | PK | 唯一标识 |
- | title | TEXT | NOT NULL | 标题（必填） |
+ | id | VARCHAR(36)（UUID） | PK | 唯一标识 |
+ | title | VARCHAR(500) | NOT NULL | 标题（必填） |
  | content | TEXT | | 正文（Markdown，可选） |
- | status | TEXT | NOT NULL, DEFAULT 'seed' | 种子/萌芽/生长中/已实现/已归档/休眠 |
- | created_at | TEXT (ISO 8601) | NOT NULL | 捕获时间 |
- | updated_at | TEXT (ISO 8601) | NOT NULL | 最后修改时间 |
- | last_reviewed_at | TEXT (ISO 8601) | | 最后回看时间（回访用） |
+ | status | VARCHAR(20) | NOT NULL, DEFAULT 'seed' | 种子/萌芽/生长中/已实现/已归档/休眠 |
+ | collection | VARCHAR(100) | | 所属集合（可选） |
+ | created_at | DATETIME(3) | NOT NULL | 捕获时间 |
+ | updated_at | DATETIME(3) | NOT NULL | 最后修改时间 |
+ | last_reviewed_at | DATETIME(3) | | 最后回看时间（回访用） |
  
  状态枚举：`seed` | `sprout` | `growing` | `realized` | `archived` | `dormant`
  
-时间线记录独立表（可选 V1 扩展，暂不实现）。
+时间线记录见下方 idea_activities 表（已实现）。
  
  ---
  
@@ -109,7 +110,7 @@
  - **入口**：列表页顶部搜索框
  - **行为**：实时搜索（输入即搜，防抖 300ms）
  - **范围**：搜索 title + content
- - **实现**：SQLite `LIKE '%keyword%'`
+ - **实现**：MySQL `LIKE '%keyword%'`（title + content）
  - **空结果**：显示"没有找到匹配的想法"
  
  ### 3.5 每日一想法（最简回访）
@@ -135,11 +136,10 @@
  ## 五、非功能性需求
  
  - 启动速度：首次加载 < 1.5s
- - 离线可用：核心功能无需网络
- - 数据安全：本地 SQLite 存储
+ - 离线可用：全部为本地服务（Next.js + 本机 Docker MySQL），无外部网络依赖
+ - 数据安全：本机 MySQL 容器（spark-mysql）存储
  - 可导出：V1 不做，V4 规划
  
  ---
  
- *文档版本：v1.0 · 2026-08-10*
- *** End of File
+*文档版本：v1.1 · 2026-08-13（数据层由 SQLite 迁移至 MySQL）*

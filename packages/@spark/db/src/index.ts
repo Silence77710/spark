@@ -3,11 +3,11 @@ export type { RowDataPacket };
 
 
 const pool: Pool = mysql.createPool({
-  host: "127.0.0.1",
-  port: 3306,
-  user: "root",
-  password: "spark123",
-  database: "spark",
+  host: process.env.MYSQL_HOST ?? "127.0.0.1",
+  port: Number(process.env.MYSQL_PORT ?? 3306),
+  user: process.env.MYSQL_USER ?? "root",
+  password: process.env.MYSQL_PASSWORD ?? "spark123",
+  database: process.env.MYSQL_DATABASE ?? "spark",
   waitForConnections: true,
   connectionLimit: 5,
   queueLimit: 0,
