@@ -11,14 +11,32 @@ interface Idea {
   created_at: string; updated_at: string; last_reviewed_at: string | null;
 }
 
-const STATUS_MAP: Record<string, { label: string; dot: string }> = {
-  seed:     { label: "种子",   dot: "bg-amber-400" },
-  sprout:   { label: "萌芽",   dot: "bg-emerald-400" },
-  growing:  { label: "生长中", dot: "bg-sky-400" },
-  realized: { label: "已实现", dot: "bg-violet-400" },
-  archived: { label: "已归档", dot: "bg-neutral-400" },
-  dormant:  { label: "休眠",   dot: "bg-stone-400" },
-};
+interface ApiResponse {
+  ideas: Idea[];
+  total: number;
+  page: number;
+  pageSize: number;
+}
+
+const STATUS_CONFIG = [
+  { value: "seed",     label: "种子",   dot: "bg-amber-400",  text: "text-amber-700", bg: "bg-amber-50", ring: "ring-amber-200/50" },
+  { value: "sprout",   label: "萌芽",   dot: "bg-emerald-400",text: "text-emerald-700", bg: "bg-emerald-50", ring: "ring-emerald-200/50" },
+  { value: "growing",  label: "生长中", dot: "bg-sky-400",    text: "text-sky-700", bg: "bg-sky-50", ring: "ring-sky-200/50" },
+  { value: "realized", label: "已实现", dot: "bg-violet-400", text: "text-violet-700", bg: "bg-violet-50", ring: "ring-violet-200/50" },
+  { value: "archived", label: "已归档", dot: "bg-neutral-400",text: "text-neutral-500", bg: "bg-neutral-50", ring: "ring-neutral-200/50" },
+  { value: "dormant",  label: "休眠",   dot: "bg-stone-400",  text: "text-stone-500", bg: "bg-stone-50", ring: "ring-stone-200/50" },
+];
+
+const STATUS_MAP: Record<string, { label: string; dot: string }> = Object.fromEntries(
+  STATUS_CONFIG.map(c => [c.value, { label: c.label, dot: c.dot }])
+);
+
+const SORT_OPTIONS = [
+  { value: "newest",  label: "最新创建" },
+  { value: "oldest",  label: "最早创建" },
+  { value: "updated", label: "最近更新" },
+  { value: "status",  label: "按状态" },
+];
 
 const COLLECTION_PALETTE = [
   { bg: "bg-amber-50", text: "text-amber-700", ring: "ring-amber-200/50", dot: "bg-amber-400" },
@@ -52,6 +70,19 @@ export default function HomePage() {
   const [activeCollection, setActiveCollection] = useState("");
   const [search, setSearch] = useState("");
   const [loading, setLoading] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
+
+  // Status filter (multi-select)
+  const [activeStatuses, setActiveStatuses] = useState<string[]>([]);
+
+  // Sort
+  const [sort, setSort] = useState("newest");
+  const [showSortMenu, setShowSortMenu] = useState(false);
+
+  // Pagination
+  const [page, setPage] = useState(1);
+  const [total, setTotal] = useState(0);
+  const pageSize = 20;
 
   // Capture form state
   const [expanded, setExpanded] = useState(false);
@@ -67,17 +98,45 @@ export default function HomePage() {
   const [showDaily, setShowDaily] = useState(true);
 
   const inputRef = useRef<HTMLInputElement>(null);
-  const searchTimer = useRef<ReturnType<typeof setTimeout>>();
+  const searchTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  const sortMenuRef = useRef<HTMLDivElement>(null);
 
-  const loadIdeas = useCallback(async (q?: string, col?: string) => {
-    const params = new URLSearchParams();
-    if (q) params.set("q", q);
-    if (col) params.set("collection", col);
-    const url = `/api/ideas${params.toString() ? "?" + params.toString() : ""}`;
-    const r = await fetch(url);
-    if (r.ok) setIdeas(await r.json());
+  const buildParams = useCallback((overrides?: { page?: number; append?: boolean }) => {
+    const p = new URLSearchParams();
+    if (search.trim()) p.set("q", search.trim());
+    if (activeCollection) p.set("collection", activeCollection);
+    if (activeStatuses.length > 0) p.set("status", activeStatuses.join(","));
+    p.set("sort", sort);
+    p.set("page", String(overrides?.page ?? 1));
+    p.set("pageSize", String(pageSize));
+    return p;
+  }, [search, activeCollection, activeStatuses, sort]);
+
+  const loadIdeas = useCallback(async (overrides?: { page?: number; append?: boolean }) => {
+    const p = buildParams(overrides);
+    const targetPage = overrides?.page ?? 1;
+    const isAppend = overrides?.append ?? false;
+
+    if (isAppend) {
+      setLoadingMore(true);
+    } else {
+      setLoading(true);
+    }
+
+    const r = await fetch(`/api/ideas?${p.toString()}`);
+    if (r.ok) {
+      const data: ApiResponse = await r.json();
+      if (isAppend) {
+        setIdeas(prev => [...prev, ...data.ideas]);
+      } else {
+        setIdeas(data.ideas);
+      }
+      setTotal(data.total);
+      setPage(targetPage);
+    }
     setLoading(false);
-  }, []);
+    setLoadingMore(false);
+  }, [buildParams]);
 
   const loadCollections = useCallback(async () => {
     const r = await fetch("/api/collections");
@@ -85,20 +144,44 @@ export default function HomePage() {
   }, []);
 
   const loadDaily = useCallback(async () => {
-    const r = await fetch("/api/ideas");
+    const r = await fetch("/api/ideas?pageSize=999");
     if (!r.ok) return;
-    const all: Idea[] = await r.json();
+    const data: ApiResponse = await r.json();
+    const all = data.ideas;
     const old = all.filter(i => (Date.now() - new Date(i.created_at).getTime()) / 86400000 >= 7);
     if (old.length) setDaily(old[Math.floor(Math.random() * old.length)]);
   }, []);
 
-  useEffect(() => { loadCollections(); loadDaily(); loadIdeas(); }, [loadCollections, loadDaily, loadIdeas]);
+  useEffect(() => {
+    loadCollections();
+    loadDaily();
+    loadIdeas();
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Refresh when filters change
+  useEffect(() => {
+    loadIdeas();
+  }, [search, activeCollection, activeStatuses, sort]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Close sort menu on outside click
+  useEffect(() => {
+    const handleClick = (e: MouseEvent) => {
+      if (sortMenuRef.current && !sortMenuRef.current.contains(e.target as Node)) {
+        setShowSortMenu(false);
+      }
+    };
+    document.addEventListener("mousedown", handleClick);
+    return () => document.removeEventListener("mousedown", handleClick);
+  }, []);
 
   const handleSearch = (v: string) => {
     setSearch(v);
-    setLoading(true);
     clearTimeout(searchTimer.current);
-    searchTimer.current = setTimeout(() => loadIdeas(v, activeCollection), 250);
+    searchTimer.current = setTimeout(() => {}, 250);
+  };
+
+  const handleLoadMore = () => {
+    loadIdeas({ page: page + 1, append: true });
   };
 
   const saveIdea = async () => {
@@ -114,7 +197,7 @@ export default function HomePage() {
     });
     setTitle(""); setContent(""); setCaptureCollection(""); setExpanded(false); setShowCollectionPicker(false);
     loadCollections();
-    loadIdeas(search, activeCollection);
+    loadIdeas();
     loadDaily();
     inputRef.current?.focus();
   };
@@ -131,11 +214,22 @@ export default function HomePage() {
 
   const toggleCollection = (name: string) => {
     setActiveCollection(activeCollection === name ? "" : name);
-    setSearch("");
-    setLoading(true);
-    loadIdeas("", activeCollection === name ? "" : name);
   };
 
+  const toggleStatus = (value: string) => {
+    setActiveStatuses(prev =>
+      prev.includes(value) ? prev.filter(v => v !== value) : [...prev, value]
+    );
+  };
+
+  const clearAllFilters = () => {
+    setActiveStatuses([]);
+    setActiveCollection("");
+    setSearch("");
+  };
+
+  const hasAnyFilter = activeStatuses.length > 0 || activeCollection || search.trim().length > 0;
+  const hasMore = ideas.length < total;
   const isSearching = search.trim().length > 0;
 
   return (
@@ -154,9 +248,9 @@ export default function HomePage() {
               <p className="text-[11px] text-[#a3a3a3] tracking-wide">想法操作系统</p>
             </div>
           </div>
-          {!loading && ideas.length > 0 && (
+          {!loading && total > 0 && (
             <span className="text-[12px] text-[#a3a3a3] tabular-nums">
-              {ideas.length} 个想法
+              {total} 个想法
             </span>
           )}
         </div>
@@ -203,7 +297,7 @@ export default function HomePage() {
       {/* ============================
           Capture
           ============================ */}
-      <div className={`mb-6 rounded-[10px] bg-white shadow-sm ring-1 transition-all duration-200 ${
+      <div className={`mb-6 rounded-[10px] bg-white shadow-sm ring-1 transition-all duration-200 relative z-40 ${
         expanded ? "ring-amber-200/50 shadow-md" : "ring-[#e5e5e5] hover:ring-[#d4d4d4]"
       }`}>
         <div className="px-4 py-3.5">
@@ -296,7 +390,7 @@ export default function HomePage() {
                     </div>
 
                     {showCollectionPicker && (
-                      <div className="absolute top-full left-0 mt-1.5 w-56 rounded-[8px] bg-white shadow-lg ring-1 ring-[#e5e5e5] z-10 py-1.5 animate-scale-in">
+                      <div className="absolute top-full left-0 mt-1.5 w-56 rounded-[8px] bg-white shadow-lg ring-1 ring-[#e5e5e5] z-50 py-1.5 animate-scale-in">
                         {collections.length > 0 && (
                           <div>
                             <div className="px-3 pb-1">
@@ -387,10 +481,10 @@ export default function HomePage() {
       </div>
 
       {/* ============================
-          Search
+          Search + Sort
           ============================ */}
-      <div className="mb-4">
-        <div className="relative">
+      <div className="mb-4 flex items-center gap-2">
+        <div className="relative flex-1">
           <svg className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-[#a3a3a3] pointer-events-none" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
             <circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/>
           </svg>
@@ -412,6 +506,73 @@ export default function HomePage() {
             </button>
           )}
         </div>
+
+        {/* Sort dropdown */}
+        <div className="relative shrink-0" ref={sortMenuRef}>
+          <button
+            onClick={() => setShowSortMenu(!showSortMenu)}
+            className="flex h-9 items-center gap-1.5 rounded-[8px] bg-white px-2.5 text-[11px] font-medium text-[#737373] shadow-sm ring-1 ring-[#e5e5e5] hover:bg-[#fafafa] transition-colors"
+          >
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M3 7h6"/><path d="M3 12h12"/><path d="M3 17h18"/>
+            </svg>
+            <span className="hidden sm:inline">{SORT_OPTIONS.find(o => o.value === sort)?.label}</span>
+            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={`transition-transform ${showSortMenu ? "rotate-180" : ""}`}>
+              <polyline points="6 9 12 15 18 9"/>
+            </svg>
+          </button>
+          {showSortMenu && (
+            <div className="absolute right-0 top-full mt-1.5 w-32 rounded-[8px] bg-white shadow-lg ring-1 ring-[#e5e5e5] z-10 py-1 animate-scale-in">
+              {SORT_OPTIONS.map(opt => (
+                <button
+                  key={opt.value}
+                  onClick={() => { setSort(opt.value); setShowSortMenu(false); }}
+                  className={`flex w-full items-center gap-2 px-3 py-1.5 text-[12px] hover:bg-[#f5f5f5] transition-colors ${opt.value === sort ? "text-amber-600 font-medium" : "text-[#737373]"}`}
+                >
+                  {opt.value === sort && (
+                    <svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                      <polyline points="20 6 9 17 4 12"/>
+                    </svg>
+                  )}
+                  <span className={opt.value === sort ? "" : "ml-4"}>{opt.label}</span>
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* ============================
+          Status filters
+          ============================ */}
+      <div className="mb-3 flex flex-wrap gap-1.5">
+        <button
+          onClick={() => setActiveStatuses([])}
+          className={`inline-flex items-center rounded-full px-3 py-1.5 text-[11px] font-medium transition-colors ${
+            activeStatuses.length === 0
+              ? "bg-[#171717] text-white"
+              : "bg-white text-[#737373] ring-1 ring-[#e5e5e5] hover:ring-[#d4d4d4]"
+          }`}
+        >
+          全部
+        </button>
+        {STATUS_CONFIG.map(s => {
+          const isActive = activeStatuses.includes(s.value);
+          return (
+            <button
+              key={s.value}
+              onClick={() => toggleStatus(s.value)}
+              className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-[11px] font-medium transition-colors ${
+                isActive
+                  ? `${s.bg} ${s.text} ring-1 ${s.ring}`
+                  : "bg-white text-[#737373] ring-1 ring-[#e5e5e5] hover:ring-[#d4d4d4]"
+              }`}
+            >
+              <span className={`h-1.5 w-1.5 rounded-full ${s.dot}`} />
+              {s.label}
+            </button>
+          );
+        })}
       </div>
 
       {/* ============================
@@ -420,7 +581,7 @@ export default function HomePage() {
       {collections.length > 0 && (
         <div className="mb-5 flex flex-wrap gap-1.5">
           <button
-            onClick={() => toggleCollection("")}
+            onClick={() => setActiveCollection("")}
             className={`inline-flex items-center rounded-full px-3 py-1.5 text-[11px] font-medium transition-colors ${
               !activeCollection
                 ? "bg-[#171717] text-white"
@@ -446,6 +607,47 @@ export default function HomePage() {
               </button>
             );
           })}
+        </div>
+      )}
+
+      {/* ============================
+          Active filters bar
+          ============================ */}
+      {hasAnyFilter && (
+        <div className="mb-4 flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-1.5">
+            {activeStatuses.map(v => {
+              const s = STATUS_CONFIG.find(c => c.value === v);
+              if (!s) return null;
+              return (
+                <span key={v} className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-medium ring-1 ${s.bg} ${s.text} ${s.ring}`}>
+                  <span className={`h-1 w-1 rounded-full ${s.dot}`} />
+                  {s.label}
+                  <button onClick={() => toggleStatus(v)} className="ml-0.5 hover:opacity-60">
+                    <svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M18 6 6 18"/><path d="m6 6 12 12"/>
+                    </svg>
+                  </button>
+                </span>
+              );
+            })}
+            {activeCollection && (
+              <span className="inline-flex items-center gap-1 rounded-full bg-[#f5f5f5] px-2 py-0.5 text-[10px] font-medium text-[#737373] ring-1 ring-[#e5e5e5]">
+                {activeCollection}
+                <button onClick={() => setActiveCollection("")} className="ml-0.5 hover:opacity-60">
+                  <svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M18 6 6 18"/><path d="m6 6 12 12"/>
+                  </svg>
+                </button>
+              </span>
+            )}
+          </div>
+          <button
+            onClick={clearAllFilters}
+            className="text-[10px] font-medium text-[#a3a3a3] hover:text-[#737373] transition-colors shrink-0"
+          >
+            清除筛选
+          </button>
         </div>
       )}
 
@@ -483,9 +685,6 @@ export default function HomePage() {
         </div>
       ) : (
         <div>
-          {isSearching && (
-            <p className="mb-3 text-[12px] text-[#a3a3a3]">找到 {ideas.length} 个结果</p>
-          )}
           <div className="space-y-2">
             {ideas.map((idea, i) => {
               const s = STATUS_MAP[idea.status] ?? STATUS_MAP.seed;
@@ -527,6 +726,34 @@ export default function HomePage() {
                 </div>
               );
             })}
+          </div>
+
+          {/* Pagination */}
+          <div className="mt-6 flex flex-col items-center gap-2">
+            <p className="text-[11px] text-[#a3a3a3] tabular-nums">
+              显示 {ideas.length} 条，共 {total} 条
+            </p>
+            {hasMore && (
+              <button
+                onClick={handleLoadMore}
+                disabled={loadingMore}
+                className="inline-flex h-8 items-center gap-1.5 rounded-[8px] border border-[#e5e5e5] bg-white px-4 text-[12px] font-medium text-[#737373] shadow-sm hover:bg-[#fafafa] hover:text-[#171717] disabled:opacity-40 transition-colors"
+              >
+                {loadingMore ? (
+                  <>
+                    <div className="h-3 w-3 animate-spin rounded-full border-2 border-[#e5e5e5] border-t-amber-500" />
+                    加载中...
+                  </>
+                ) : (
+                  <>
+                    <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M12 5v14"/><path d="M5 12h14"/>
+                    </svg>
+                    加载更多
+                  </>
+                )}
+              </button>
+            )}
           </div>
         </div>
       )}
