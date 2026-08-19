@@ -25,3 +25,10 @@ export function truncate(str: string, len: number): string {
 export function generateId(): string {
   return crypto.randomUUID();
 }
+
+export {
+  type ImportanceLevel,
+  DEFAULT_IMPORTANCE_LEVELS,
+  getImportanceLabel,
+  mergeImportanceLevels,
+} from "./importance";

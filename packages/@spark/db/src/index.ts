@@ -23,9 +23,16 @@ export interface IdeaRow {
   content: string | null;
   status: string;
   collection: string | null;
-  created_at: string;
-  updated_at: string;
-  last_reviewed_at: string | null;
+ importance: number;
+ is_capsule: boolean;
+ unlock_at: string | null;
+ epitaph: string | null;
+ parent_a_id: string | null;
+ parent_b_id: string | null;
+ emotion: string | null;
+ created_at: string;
+ updated_at: string;
+ last_reviewed_at: string | null;
 }
 
 export function releaseDb(conn: PoolConnection): void {
@@ -37,5 +44,30 @@ export interface ActivityRow {
   idea_id: string;
   type: string;
   content: string;
+  created_at: string;
+}
+
+export interface SettingRow {
+ key: string;
+ value: string | null;
+}
+
+export interface AiInteractionRow {
+  id: string;
+  feature: string;
+  idea_id: string | null;
+  request_summary: string | null;
+  response_summary: string | null;
+ tokens_used: number | null;
+ created_at: string;
+}
+
+export interface IdeaRelationshipRow {
+  id: string;
+  source_id: string;
+  target_id: string;
+  type: string;
+  created_by: string;
+  ai_explanation: string | null;
   created_at: string;
 }

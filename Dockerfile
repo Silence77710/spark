@@ -16,10 +16,6 @@ RUN apt-get update \
 
 # ---- 安装依赖并构建 ----
 FROM base AS builder
-# better-sqlite3 可能走源码编译，备好工具链
-RUN apt-get update \
-  && apt-get install -y --no-install-recommends python3 make g++ \
-  && rm -rf /var/lib/apt/lists/*
 WORKDIR /app
 COPY . .
 RUN --mount=type=cache,id=pnpm-store,target=/pnpm/store \

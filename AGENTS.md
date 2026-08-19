@@ -118,6 +118,9 @@
 pnpm install
 pnpm dev          # http://localhost:3000
 
+# 数据库初始化（首次运行或重建容器后执行）
+docker exec -i spark-mysql mysql -uroot -pspark123 < packages/@spark/db/schema.sql
+
 # 本地镜像运行（生产模式，容器通过 host.docker.internal 连 spark-mysql）
 docker build -t spark-web:local .
 docker run -d --name spark-web -p 3000:3000 \
@@ -129,18 +132,19 @@ docker run -d --name spark-web -p 3000:3000 \
 
  ```
  spark/
- ├── AGENTS.md              # 本文件
- ├── PRODUCT.md             # 产品定义文档
- ├── SPEC.md                # V1 规格文档
- ├── Dockerfile             # 本地镜像构建（生产运行）
+├── AGENTS.md              # 本文件
+├── PRODUCT.md             # 产品定义文档
+├── SPEC.md                # V1 规格文档
+├── PRD-AI.md              # AI 助手 PRD（思考伙伴模块）
+├── Dockerfile             # 本地镜像构建（生产运行）
  ├── apps/                  # 应用
  │   └── web/               # Next.js 主应用
  ├── packages/              # 共享包
- │   └── @spark/            # 共享模块
- │       ├── ui/            # 通用组件
- │       ├── utils/         # 工具函数
- │       └── db/            # 数据层（mysql2 连接池，MySQL）
- ├── .cursor/
+│   └── @spark/            # 共享模块
+│       ├── utils/         # 工具函数
+│       └── db/            # 数据层（mysql2 连接池，MySQL）
+│           └── schema.sql # 数据库初始化脚本
+├── .cursor/
  │   └── skills/            # 项目级 Skills
  ├── package.json
  ├── pnpm-workspace.yaml

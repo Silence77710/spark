@@ -2,12 +2,17 @@
 
 import { useState, useEffect, useCallback, useRef } from "react";
 import { useRouter } from "next/navigation";
-import { formatRelativeTime, truncate } from "@spark/utils";
+import { formatRelativeTime, truncate, DEFAULT_IMPORTANCE_LEVELS, getImportanceLabel, type ImportanceLevel } from "@spark/utils";
 import { MarkdownPreview } from "@/components/markdown";
 
 interface Idea {
   id: string; title: string; content: string; status: string;
   collection: string;
+  importance: number;
+  is_capsule: boolean;
+  unlock_at: string | null;
+  epitaph: string | null;
+  emotion: string | null;
   created_at: string; updated_at: string; last_reviewed_at: string | null;
 }
 
@@ -31,7 +36,24 @@ const STATUS_MAP: Record<string, { label: string; dot: string }> = Object.fromEn
   STATUS_CONFIG.map(c => [c.value, { label: c.label, dot: c.dot }])
 );
 
+const IMPORTANCE_CONFIG = [
+  { value: 0, label: "未评级",   dot: "bg-neutral-300",  text: "text-neutral-500",  bg: "bg-neutral-50",  ring: "ring-neutral-200/50" },
+  { value: 1, label: "灵感碎片", dot: "bg-slate-400",    text: "text-slate-600",    bg: "bg-slate-50",    ring: "ring-slate-200/50" },
+  { value: 2, label: "有意思",   dot: "bg-amber-400",    text: "text-amber-700",    bg: "bg-amber-50",    ring: "ring-amber-200/50" },
+  { value: 3, label: "想做",     dot: "bg-orange-500",   text: "text-orange-700",   bg: "bg-orange-50",   ring: "ring-orange-200/50" },
+  { value: 4, label: "必做",     dot: "bg-rose-500",     text: "text-rose-700",     bg: "bg-rose-50",     ring: "ring-rose-200/50" },
+];
+
+const EMOTION_CONFIG = [
+  { value: "excited",  label: "兴奋", dot: "bg-rose-400",    text: "text-rose-700",    bg: "bg-rose-50",    ring: "ring-rose-200/50" },
+  { value: "curious",  label: "好奇", dot: "bg-amber-400",   text: "text-amber-700",   bg: "bg-amber-50",   ring: "ring-amber-200/50" },
+  { value: "anxious",  label: "焦虑", dot: "bg-orange-400",  text: "text-orange-700",  bg: "bg-orange-50",  ring: "ring-orange-200/50" },
+  { value: "calm",     label: "平静", dot: "bg-sky-400",     text: "text-sky-700",     bg: "bg-sky-50",     ring: "ring-sky-200/50" },
+  { value: "confused", label: "困惑", dot: "bg-violet-400", text: "text-violet-700",  bg: "bg-violet-50",  ring: "ring-violet-200/50" },
+];
+
 const SORT_OPTIONS = [
+  { value: "important", label: "重要优先" },
   { value: "newest",  label: "最新创建" },
   { value: "oldest",  label: "最早创建" },
   { value: "updated", label: "最近更新" },
@@ -66,25 +88,21 @@ function SparkIcon({ size = 18 }: { size?: number }) {
 export default function HomePage() {
   const router = useRouter();
   const [ideas, setIdeas] = useState<Idea[]>([]);
-  const [collections, setCollections] = useState<string[]>([]);
+  interface CollectionInfo { name: string; count: number; }
+  const [collections, setCollections] = useState<CollectionInfo[]>([]);
   const [activeCollection, setActiveCollection] = useState("");
   const [search, setSearch] = useState("");
   const [loading, setLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
 
-  // Status filter (multi-select)
   const [activeStatuses, setActiveStatuses] = useState<string[]>([]);
-
-  // Sort
-  const [sort, setSort] = useState("newest");
+  const [sort, setSort] = useState("important");
   const [showSortMenu, setShowSortMenu] = useState(false);
 
-  // Pagination
   const [page, setPage] = useState(1);
   const [total, setTotal] = useState(0);
   const pageSize = 20;
 
-  // Capture form state
   const [expanded, setExpanded] = useState(false);
   const [title, setTitle] = useState("");
   const [content, setContent] = useState("");
@@ -92,14 +110,25 @@ export default function HomePage() {
   const [captureCollection, setCaptureCollection] = useState("");
   const [showCollectionPicker, setShowCollectionPicker] = useState(false);
   const [newCollectionName, setNewCollectionName] = useState("");
+  const [captureEmotion, setCaptureEmotion] = useState("");
+  const [showEmotionPicker, setShowEmotionPicker] = useState(false);
 
-  // Daily review
   const [daily, setDaily] = useState<Idea | null>(null);
   const [showDaily, setShowDaily] = useState(true);
+
+  const [importanceLabels, setImportanceLabels] = useState<ImportanceLevel[]>(DEFAULT_IMPORTANCE_LEVELS);
+  const [graveyardCount, setGraveyardCount] = useState(0);
+  const [quickMenuId, setQuickMenuId] = useState<string | null>(null);
+  const [showCollectionMgr, setShowCollectionMgr] = useState(false);
+  const [renamingCol, setRenamingCol] = useState<string | null>(null);
+  const [renameColVal, setRenameColVal] = useState("");
+  const [deletingCol, setDeletingCol] = useState<string | null>(null);
 
   const inputRef = useRef<HTMLInputElement>(null);
   const searchTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const sortMenuRef = useRef<HTMLDivElement>(null);
+  const quickMenuRef = useRef<HTMLDivElement>(null);
+  const collectionPickerRef = useRef<HTMLDivElement>(null);
 
   const buildParams = useCallback((overrides?: { page?: number; append?: boolean }) => {
     const p = new URLSearchParams();
@@ -152,22 +181,49 @@ export default function HomePage() {
     if (old.length) setDaily(old[Math.floor(Math.random() * old.length)]);
   }, []);
 
+  const loadSettings = useCallback(async () => {
+    const r = await fetch("/api/settings");
+    if (r.ok) {
+      const d = await r.json();
+      if (d?.importance_levels) setImportanceLabels(d.importance_levels);
+    }
+  }, []);
+
+  const loadGraveyardCount = useCallback(async () => {
+    const r = await fetch("/api/ideas?pageSize=999");
+    if (!r.ok) return;
+    const data: ApiResponse = await r.json();
+    const cutoff = Date.now() - 90 * 86400000;
+    const count = data.ideas.filter(i =>
+      i.importance <= 1 &&
+      new Date(i.last_reviewed_at || i.updated_at).getTime() < cutoff
+    ).length;
+    setGraveyardCount(count);
+  }, []);
+
   useEffect(() => {
     loadCollections();
     loadDaily();
+    loadSettings();
+    loadGraveyardCount();
     loadIdeas();
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  }, []);
 
-  // Refresh when filters change
   useEffect(() => {
     loadIdeas();
-  }, [search, activeCollection, activeStatuses, sort]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [search, activeCollection, activeStatuses, sort]);
 
-  // Close sort menu on outside click
   useEffect(() => {
     const handleClick = (e: MouseEvent) => {
       if (sortMenuRef.current && !sortMenuRef.current.contains(e.target as Node)) {
         setShowSortMenu(false);
+      }
+      if (quickMenuRef.current && !quickMenuRef.current.contains(e.target as Node)) {
+        setQuickMenuId(null);
+      }
+      if (collectionPickerRef.current && !collectionPickerRef.current.contains(e.target as Node)) {
+        setShowCollectionPicker(false);
+        setShowEmotionPicker(false);
       }
     };
     document.addEventListener("mousedown", handleClick);
@@ -193,12 +249,15 @@ export default function HomePage() {
         title: title.trim(),
         content: content.trim(),
         collection: captureCollection.trim(),
+        emotion: captureEmotion || undefined,
       }),
     });
-    setTitle(""); setContent(""); setCaptureCollection(""); setExpanded(false); setShowCollectionPicker(false);
+    setTitle(""); setContent(""); setCaptureCollection(""); setCaptureEmotion("");
+    setExpanded(false); setShowCollectionPicker(false); setShowEmotionPicker(false);
     loadCollections();
     loadIdeas();
     loadDaily();
+    loadGraveyardCount();
     inputRef.current?.focus();
   };
 
@@ -208,7 +267,8 @@ export default function HomePage() {
   };
 
   const collapseCapture = () => {
-    setTitle(""); setContent(""); setExpanded(false); setShowCollectionPicker(false);
+    setTitle(""); setContent(""); setCaptureCollection(""); setCaptureEmotion("");
+    setExpanded(false); setShowCollectionPicker(false); setShowEmotionPicker(false);
     inputRef.current?.blur();
   };
 
@@ -228,15 +288,65 @@ export default function HomePage() {
     setSearch("");
   };
 
+  const quickAdvanceStatus = async (idea: Idea) => {
+    const order = ["seed", "sprout", "growing", "realized"];
+    const idx = order.indexOf(idea.status);
+    const next = idx >= 0 && idx < order.length - 1 ? order[idx + 1] : idea.status;
+    if (next === idea.status) return;
+    setIdeas(prev => prev.map(i => i.id === idea.id ? { ...i, status: next } : i));
+    setQuickMenuId(null);
+    await fetch(`/api/ideas/${idea.id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ status: next }),
+    });
+  };
+
+  const quickSetImportance = async (id: string, value: number) => {
+    setIdeas(prev => prev.map(i => i.id === id ? { ...i, importance: value } : i));
+    await fetch(`/api/ideas/${id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ importance: value }),
+    });
+  };
+
+  const quickArchive = async (idea: Idea) => {
+    setIdeas(prev => prev.filter(i => i.id !== idea.id));
+    setQuickMenuId(null);
+    setTotal(t => t - 1);
+    await fetch(`/api/ideas/${idea.id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ status: "archived" }),
+    });
+    loadGraveyardCount();
+  };
+
   const hasAnyFilter = activeStatuses.length > 0 || activeCollection || search.trim().length > 0;
+  const doRenameCollection = async (oldName: string, newName: string) => {
+    if (!newName.trim() || newName.trim() === oldName) { setRenamingCol(null); return; }
+    await fetch("/api/collections", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ oldName, newName: newName.trim() }),
+    });
+    if (activeCollection === oldName) setActiveCollection(newName.trim());
+    setRenamingCol(null); setRenameColVal("");
+    loadCollections(); loadIdeas();
+  };
+  const doDeleteCollection = async (name: string) => {
+    await fetch(`/api/collections?name=${encodeURIComponent(name)}`, { method: "DELETE" });
+    if (activeCollection === name) setActiveCollection("");
+    setDeletingCol(null);
+    loadCollections(); loadIdeas(); loadGraveyardCount();
+  };
   const hasMore = ideas.length < total;
   const isSearching = search.trim().length > 0;
 
   return (
     <div className="mx-auto max-w-[640px] px-6 py-8">
-      {/* ============================
-          Header
-          ============================ */}
+      {/* Header */}
       <header className="mb-8">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">
@@ -248,22 +358,56 @@ export default function HomePage() {
               <p className="text-[11px] text-[#a3a3a3] tracking-wide">想法操作系统</p>
             </div>
           </div>
-          {!loading && total > 0 && (
-            <span className="text-[12px] text-[#a3a3a3] tabular-nums">
-              {total} 个想法
-            </span>
-          )}
+         <div className="flex items-center gap-3">
+            <button
+              onClick={() => router.push("/graph")}
+              className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-[11px] font-medium text-[#a3a3a3] hover:bg-[#f5f5f5] transition-colors"
+              title="想法图谱"
+            >
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <circle cx="12" cy="5" r="2"/><circle cx="5" cy="19" r="2"/><circle cx="19" cy="19" r="2"/>
+                <path d="M12 7v3M12 12l-5 5M12 12l5 5"/>
+              </svg>
+              <span>图谱</span>
+            </button>
+            <button
+              onClick={() => router.push("/retro")}
+              className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-[11px] font-medium text-[#a3a3a3] hover:bg-[#f5f5f5] transition-colors"
+              title="回顾中心"
+            >
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/>
+                <path d="M3 3v5h5"/>
+              </svg>
+              <span>回顾</span>
+            </button>
+           {graveyardCount > 0 && (
+              <button
+                onClick={() => router.push("/graveyard")}
+                className="relative inline-flex items-center gap-1 rounded-md px-2 py-1 text-[11px] font-medium text-[#a3a3a3] hover:bg-[#f5f5f5] transition-colors"
+                title="想法墓地"
+              >
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/>
+                </svg>
+                <span className="tabular-nums">{graveyardCount}</span>
+              </button>
+            )}
+            {!loading && total > 0 && (
+              <span className="text-[12px] text-[#a3a3a3] tabular-nums">
+                {total} 个想法
+              </span>
+            )}
+          </div>
         </div>
       </header>
 
-      {/* ============================
-          Daily Review
-          ============================ */}
+      {/* Daily Review */}
       {daily && showDaily && (
-        <div className="mb-5 animate-slide-down">
-          <button
+       <div className="mb-5 animate-slide-down">
+          <div
             onClick={() => { router.push(`/ideas/${daily.id}`); }}
-            className="group relative w-full rounded-[10px] bg-white px-4 py-3.5 text-left shadow-sm ring-1 ring-[#e5e5e5] transition-all hover:shadow-md hover:ring-amber-200/50 active:scale-[0.99]"
+            className="group relative w-full rounded-[10px] bg-white px-4 py-3.5 text-left shadow-sm ring-1 ring-[#e5e5e5] transition-all hover:shadow-md hover:ring-amber-200/50 active:scale-[0.99] cursor-pointer"
           >
             <div className="flex items-start gap-3">
               <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-amber-50 ring-1 ring-amber-200/50">
@@ -290,13 +434,11 @@ export default function HomePage() {
                 </svg>
               </button>
             </div>
-          </button>
+          </div>
         </div>
       )}
 
-      {/* ============================
-          Capture
-          ============================ */}
+      {/* Capture */}
       <div className={`mb-6 rounded-[10px] bg-white shadow-sm ring-1 transition-all duration-200 relative z-40 ${
         expanded ? "ring-amber-200/50 shadow-md" : "ring-[#e5e5e5] hover:ring-[#d4d4d4]"
       }`}>
@@ -361,8 +503,9 @@ export default function HomePage() {
                     )}
                   </div>
 
-                  {/* Collection picker */}
-                  <div className="relative mb-3">
+                  {/* Collection + Emotion row */}
+                  <div ref={collectionPickerRef} className="relative mb-3 flex flex-wrap items-center gap-2">
+                    {/* Collection picker */}
                     <div className="flex items-center gap-2">
                       {captureCollection ? (
                         <span className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-[11px] font-medium ring-1 ${getCollectionStyle(captureCollection).bg} ${getCollectionStyle(captureCollection).text} ${getCollectionStyle(captureCollection).ring}`}>
@@ -379,16 +522,44 @@ export default function HomePage() {
                         </span>
                       ) : null}
                       <button
-                        onClick={() => setShowCollectionPicker(!showCollectionPicker)}
+                        onClick={() => { setShowCollectionPicker(!showCollectionPicker); setShowEmotionPicker(false); }}
                         className="inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-[11px] font-medium text-[#a3a3a3] hover:text-[#737373] hover:bg-[#f5f5f5] transition-colors"
                       >
                         <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                           <path d="M4 20h16"/><path d="M4 4h16v12H4z"/>
                         </svg>
-                        {captureCollection ? "更换集合" : "添加到集合"}
+                        {captureCollection ? "更换" : "集合"}
                       </button>
                     </div>
 
+                    {/* Emotion picker */}
+                    <div className="flex items-center gap-2">
+                      {captureEmotion ? (
+                        <span className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-[11px] font-medium ring-1 ${EMOTION_CONFIG.find(e => e.value === captureEmotion)?.bg} ${EMOTION_CONFIG.find(e => e.value === captureEmotion)?.text} ${EMOTION_CONFIG.find(e => e.value === captureEmotion)?.ring}`}>
+                          <span className={`h-1.5 w-1.5 rounded-full ${EMOTION_CONFIG.find(e => e.value === captureEmotion)?.dot}`} />
+                          {EMOTION_CONFIG.find(e => e.value === captureEmotion)?.label}
+                          <button
+                            onClick={() => { setCaptureEmotion(""); setShowEmotionPicker(false); }}
+                            className="ml-0.5 hover:opacity-60"
+                          >
+                            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                              <path d="M18 6 6 18"/><path d="m6 6 12 12"/>
+                            </svg>
+                          </button>
+                        </span>
+                      ) : null}
+                      <button
+                        onClick={() => { setShowEmotionPicker(!showEmotionPicker); setShowCollectionPicker(false); }}
+                        className="inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-[11px] font-medium text-[#a3a3a3] hover:text-[#737373] hover:bg-[#f5f5f5] transition-colors"
+                      >
+                        <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                          <path d="M19 14c1.49-1.46 3-3.21 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.76 0-3 .5-4.5 1.5-1.5-1-2.74-1.5-4.5-1.5A5.5 5.5 0 0 0 2 8.5c0 2.3 1.5 4.05 3 5.5l7 7Z"/>
+                        </svg>
+                        {captureEmotion ? "更换" : "情绪"}
+                      </button>
+                    </div>
+
+                    {/* Collection dropdown */}
                     {showCollectionPicker && (
                       <div className="absolute top-full left-0 mt-1.5 w-56 rounded-[8px] bg-white shadow-lg ring-1 ring-[#e5e5e5] z-50 py-1.5 animate-scale-in">
                         {collections.length > 0 && (
@@ -396,17 +567,18 @@ export default function HomePage() {
                             <div className="px-3 pb-1">
                               <p className="text-[10px] font-semibold text-[#a3a3a3] uppercase tracking-[0.06em]">已有集合</p>
                             </div>
-                            {collections.map(name => (
+                            {collections.map(c => (
                               <button
-                                key={name}
-                                onClick={() => { setCaptureCollection(name); setShowCollectionPicker(false); }}
-                                className={`flex w-full items-center gap-2 px-3 py-1.5 text-[13px] hover:bg-[#f5f5f5] transition-colors ${name === captureCollection ? "bg-amber-50/50" : ""}`}
-                              >
-                                <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-medium ring-1 ${getCollectionStyle(name).bg} ${getCollectionStyle(name).text} ${getCollectionStyle(name).ring}`}>
-                                  <span className={`h-1 w-1 rounded-full ${getCollectionStyle(name).dot}`} />
-                                  {name}
+                                key={c.name}
+                               onClick={() => { setCaptureCollection(c.name); setShowCollectionPicker(false); }}
+                                className={`flex w-full items-center gap-2 px-3 py-1.5 text-[13px] hover:bg-[#f5f5f5] transition-colors ${c.name === captureCollection ? "bg-amber-50/50" : ""}`}
+                             >
+                                <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-medium ring-1 ${getCollectionStyle(c.name).bg} ${getCollectionStyle(c.name).text} ${getCollectionStyle(c.name).ring}`}>
+                                  <span className={`h-1 w-1 rounded-full ${getCollectionStyle(c.name).dot}`} />
+                                 {c.name}
                                 </span>
-                                {name === captureCollection && (
+                                <span className="ml-auto text-[10px] text-[#a3a3a3] tabular-nums">{c.count}</span>
+                                {c.name === captureCollection && (
                                   <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#d97706" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="ml-auto">
                                     <polyline points="20 6 9 17 4 12"/>
                                   </svg>
@@ -446,6 +618,24 @@ export default function HomePage() {
                         </div>
                       </div>
                     )}
+
+                    {/* Emotion dropdown */}
+                    {showEmotionPicker && (
+                      <div className="absolute top-full mt-1.5 w-40 rounded-[8px] bg-white shadow-lg ring-1 ring-[#e5e5e5] z-50 py-1.5 animate-scale-in" style={{ left: "8rem" }}>
+                        {EMOTION_CONFIG.map(e => (
+                          <button
+                            key={e.value}
+                            onClick={() => { setCaptureEmotion(e.value); setShowEmotionPicker(false); }}
+                            className={`flex w-full items-center gap-2 px-3 py-1.5 text-[13px] hover:bg-[#f5f5f5] transition-colors ${captureEmotion === e.value ? "bg-amber-50/50" : ""}`}
+                          >
+                            <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-medium ring-1 ${e.bg} ${e.text} ${e.ring}`}>
+                              <span className={`h-1 w-1 rounded-full ${e.dot}`} />
+                              {e.label}
+                            </span>
+                          </button>
+                        ))}
+                      </div>
+                    )}
                   </div>
 
                   {/* Actions */}
@@ -454,8 +644,6 @@ export default function HomePage() {
                       <kbd className="inline-flex h-5 w-5 items-center justify-center rounded border border-[#e5e5e5] bg-[#fafafa] text-[10px] font-medium text-[#737373]">⌘</kbd>
                       <kbd className="inline-flex h-5 w-5 items-center justify-center rounded border border-[#e5e5e5] bg-[#fafafa] text-[10px] font-medium text-[#737373]">↵</kbd>
                       <span>发送</span>
-                      <kbd className="inline-flex h-5 w-5 items-center justify-center rounded border border-[#e5e5e5] bg-[#fafafa] text-[10px] font-medium text-[#737373]">↵</kbd>
-                      <span>换行</span>
                     </div>
                     <div className="flex items-center gap-1.5">
                       <button
@@ -480,9 +668,7 @@ export default function HomePage() {
         </div>
       </div>
 
-      {/* ============================
-          Search + Sort
-          ============================ */}
+      {/* Search + Sort */}
       <div className="mb-4 flex items-center gap-2">
         <div className="relative flex-1">
           <svg className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-[#a3a3a3] pointer-events-none" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -507,7 +693,6 @@ export default function HomePage() {
           )}
         </div>
 
-        {/* Sort dropdown */}
         <div className="relative shrink-0" ref={sortMenuRef}>
           <button
             onClick={() => setShowSortMenu(!showSortMenu)}
@@ -542,14 +727,12 @@ export default function HomePage() {
         </div>
       </div>
 
-      {/* ============================
-          Status filters
-          ============================ */}
-      <div className="mb-3 flex flex-wrap gap-1.5">
+      {/* Compact filter bar */}
+      <div className="mb-4 flex items-center gap-1.5 overflow-x-auto pb-1" style={{ scrollbarWidth: "none" }}>
         <button
           onClick={() => setActiveStatuses([])}
-          className={`inline-flex items-center rounded-full px-3 py-1.5 text-[11px] font-medium transition-colors ${
-            activeStatuses.length === 0
+          className={`inline-flex shrink-0 items-center rounded-full px-2.5 py-1 text-[11px] font-medium transition-colors ${
+            activeStatuses.length === 0 && !activeCollection
               ? "bg-[#171717] text-white"
               : "bg-white text-[#737373] ring-1 ring-[#e5e5e5] hover:ring-[#d4d4d4]"
           }`}
@@ -562,7 +745,7 @@ export default function HomePage() {
             <button
               key={s.value}
               onClick={() => toggleStatus(s.value)}
-              className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-[11px] font-medium transition-colors ${
+              className={`inline-flex shrink-0 items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-medium transition-colors ${
                 isActive
                   ? `${s.bg} ${s.text} ring-1 ${s.ring}`
                   : "bg-white text-[#737373] ring-1 ring-[#e5e5e5] hover:ring-[#d4d4d4]"
@@ -573,46 +756,91 @@ export default function HomePage() {
             </button>
           );
         })}
-      </div>
-
-      {/* ============================
-          Collection filters
-          ============================ */}
-      {collections.length > 0 && (
-        <div className="mb-5 flex flex-wrap gap-1.5">
+        {collections.length > 0 && (
+          <>
+            <div className="shrink-0 h-4 w-px bg-[#e5e5e5]" />
+            {collections.map(col => {
+              const c = getCollectionStyle(col.name);
+              return (
+                <button
+                  key={col.name}
+                  onClick={() => toggleCollection(col.name)}
+                  className={`inline-flex shrink-0 items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-medium transition-colors ${
+                    activeCollection === col.name
+                      ? `${c.bg} ${c.text} ring-1 ${c.ring}`
+                      : "bg-white text-[#737373] ring-1 ring-[#e5e5e5] hover:ring-[#d4d4d4]"
+                  }`}
+                >
+                  <span className={`h-1.5 w-1.5 rounded-full ${c.dot}`} />
+                  {col.name}
+                  <span className="text-[9px] text-[#a3a3a3] tabular-nums">{col.count}</span>
+                </button>
+              );
+            })}
+         </>
+       )}
+        {collections.length > 0 && (
           <button
-            onClick={() => setActiveCollection("")}
-            className={`inline-flex items-center rounded-full px-3 py-1.5 text-[11px] font-medium transition-colors ${
-              !activeCollection
-                ? "bg-[#171717] text-white"
-                : "bg-white text-[#737373] ring-1 ring-[#e5e5e5] hover:ring-[#d4d4d4]"
-            }`}
+            onClick={() => { setShowCollectionMgr(!showCollectionMgr); }}
+            className="inline-flex shrink-0 items-center justify-center h-6 w-6 rounded-full text-[#a3a3a3] hover:bg-[#f5f5f5] hover:text-[#737373] transition-colors"
+            title="管理集合"
           >
-            全部
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/>
+              <circle cx="12" cy="12" r="3"/>
+            </svg>
           </button>
-          {collections.map(name => {
-            const c = getCollectionStyle(name);
-            return (
-              <button
-                key={name}
-                onClick={() => toggleCollection(name)}
-                className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-[11px] font-medium transition-colors ${
-                  activeCollection === name
-                    ? `${c.bg} ${c.text} ring-1 ${c.ring}`
-                    : "bg-white text-[#737373] ring-1 ring-[#e5e5e5] hover:ring-[#d4d4d4]"
-                }`}
-              >
-                <span className={`h-1.5 w-1.5 rounded-full ${c.dot}`} />
-                {name}
-              </button>
-            );
-          })}
-        </div>
-      )}
+        )}
+        {showCollectionMgr && collections.length > 0 && (
+          <div className="fixed inset-0 z-40" onClick={() => setShowCollectionMgr(false)}>
+            <div className="absolute right-6 top-32 w-72 rounded-[10px] bg-white shadow-lg ring-1 ring-[#e5e5e5] py-2 animate-scale-in" onClick={(e) => e.stopPropagation()}>
+              <p className="px-3 pb-2 text-[10px] font-semibold text-[#a3a3a3] uppercase tracking-[0.06em]">集合管理</p>
+              {collections.map(col => (
+                <div key={col.name} className="px-3 py-1.5 hover:bg-[#f5f5f5] transition-colors">
+                  {renamingCol === col.name ? (
+                    <div className="flex items-center gap-1.5">
+                      <input
+                        autoFocus
+                        value={renameColVal}
+                        onChange={e => setRenameColVal(e.target.value)}
+                        onKeyDown={e => { if (e.key === "Enter") doRenameCollection(col.name, renameColVal); if (e.key === "Escape") { setRenamingCol(null); setRenameColVal(""); } }}
+                        className="h-6 flex-1 rounded-md border border-[#e5e5e5] bg-[#fafafa] px-2 text-[12px] text-[#171717] focus:outline-none focus:border-amber-300 focus:ring-1 focus:ring-amber-200/50"
+                      />
+                      <button onClick={() => doRenameCollection(col.name, renameColVal)} className="shrink-0 rounded-md bg-amber-500 px-2 py-0.5 text-[10px] font-medium text-white hover:bg-amber-600">确定</button>
+                    </div>
+                  ) : deletingCol === col.name ? (
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="text-[11px] text-[#525252]">{col.count} 条想法将变为未分类</span>
+                      <div className="flex items-center gap-1">
+                        <button onClick={() => doDeleteCollection(col.name)} className="rounded-md bg-rose-500 px-2 py-0.5 text-[10px] font-medium text-white hover:bg-rose-600">删除</button>
+                        <button onClick={() => setDeletingCol(null)} className="rounded-md px-2 py-0.5 text-[10px] font-medium text-[#737373] hover:bg-[#f5f5f5]">取消</button>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="flex items-center gap-1.5 min-w-0">
+                        <span className={`h-1.5 w-1.5 rounded-full shrink-0 ${getCollectionStyle(col.name).dot}`} />
+                        <span className="text-[12px] text-[#404040] truncate">{col.name}</span>
+                        <span className="text-[10px] text-[#a3a3a3] tabular-nums shrink-0">{col.count}</span>
+                      </div>
+                      <div className="flex items-center gap-1 shrink-0">
+                        <button onClick={() => { setRenamingCol(col.name); setRenameColVal(col.name); }} className="rounded p-1 text-[#a3a3a3] hover:text-[#737373] hover:bg-[#f5f5f5]" title="重命名">
+                          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/></svg>
+                        </button>
+                        <button onClick={() => setDeletingCol(col.name)} className="rounded p-1 text-[#a3a3a3] hover:text-rose-600 hover:bg-rose-50" title="删除">
+                          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 6h18"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+     </div>
 
-      {/* ============================
-          Active filters bar
-          ============================ */}
+      {/* Active filters bar */}
       {hasAnyFilter && (
         <div className="mb-4 flex items-center gap-2">
           <div className="flex flex-wrap items-center gap-1.5">
@@ -634,10 +862,10 @@ export default function HomePage() {
             {activeCollection && (
               <span className="inline-flex items-center gap-1 rounded-full bg-[#f5f5f5] px-2 py-0.5 text-[10px] font-medium text-[#737373] ring-1 ring-[#e5e5e5]">
                 {activeCollection}
-                <button onClick={() => setActiveCollection("")} className="ml-0.5 hover:opacity-60">
-                  <svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                    <path d="M18 6 6 18"/><path d="m6 6 12 12"/>
-                  </svg>
+               <button onClick={() => setActiveCollection("")} className="ml-0.5 hover:opacity-60">
+                 <svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                   <path d="M18 6 6 18"/><path d="m6 6 12 12"/>
+                 </svg>
                 </button>
               </span>
             )}
@@ -651,9 +879,7 @@ export default function HomePage() {
         </div>
       )}
 
-      {/* ============================
-          Content area
-          ============================ */}
+      {/* Content area */}
       {loading ? (
         <div className="space-y-2">
           {[1,2,3].map(i => (
@@ -688,12 +914,78 @@ export default function HomePage() {
           <div className="space-y-2">
             {ideas.map((idea, i) => {
               const s = STATUS_MAP[idea.status] ?? STATUS_MAP.seed;
+              const isSealed = idea.is_capsule && !!idea.unlock_at && new Date(idea.unlock_at) > new Date();
+              const capsuleDays = isSealed && idea.unlock_at ? Math.ceil((new Date(idea.unlock_at).getTime() - Date.now()) / 86400000) : 0;
+              const lastActivity = idea.last_reviewed_at || idea.updated_at;
+              const daysSinceReview = lastActivity ? Math.floor((Date.now() - new Date(lastActivity).getTime()) / 86400000) : 0;
+              const isAged = daysSinceReview > 30;
+              const emotionInfo = idea.emotion ? EMOTION_CONFIG.find(e => e.value === idea.emotion) : null;
+              const ic = IMPORTANCE_CONFIG.find(c => c.value === idea.importance);
+              const impLabel = importanceLabels.find(l => l.value === idea.importance)?.label ?? ic?.label ?? "";
               return (
                 <div key={idea.id} className="animate-slide-up" style={{ animationDelay: `${i * 25}ms` }}>
-                  <button
-                    onClick={() => router.push(`/ideas/${idea.id}`)}
-                    className="group relative w-full rounded-[10px] bg-white px-4 py-3.5 text-left shadow-sm ring-1 ring-[#e5e5e5] transition-all hover:shadow-md hover:ring-[#d4d4d4] active:scale-[0.99]"
+                  <div
+                    onClick={() => { setQuickMenuId(null); router.push(`/ideas/${idea.id}`); }}
+                    className={`group relative w-full cursor-pointer rounded-[10px] bg-white px-4 py-3.5 text-left shadow-sm ring-1 transition-all hover:shadow-md active:scale-[0.99] ${
+                      isAged ? "ring-neutral-200/60 opacity-75 hover:opacity-100 hover:ring-[#d4d4d4]" : "ring-[#e5e5e5] hover:ring-[#d4d4d4]"
+                    }`}
+                    title={isAged ? `${daysSinceReview}天未回看` : undefined}
                   >
+                    {/* Quick action menu trigger */}
+                    <button
+                      onClick={(e) => { e.stopPropagation(); setQuickMenuId(quickMenuId === idea.id ? null : idea.id); }}
+                      className={`absolute right-2 top-2 flex h-6 w-6 items-center justify-center rounded-md transition-all ${
+                        quickMenuId === idea.id ? "bg-[#f5f5f5] opacity-100" : "opacity-0 group-hover:opacity-100 hover:bg-[#f5f5f5]"
+                      }`}
+                    >
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#a3a3a3" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <circle cx="12" cy="5" r="1.5"/><circle cx="12" cy="12" r="1.5"/><circle cx="12" cy="19" r="1.5"/>
+                      </svg>
+                    </button>
+                    {/* Quick action dropdown */}
+                    {quickMenuId === idea.id && (
+                      <div ref={quickMenuRef} onClick={(e) => e.stopPropagation()} className="absolute right-2 top-9 z-50 w-44 rounded-[10px] bg-white shadow-lg ring-1 ring-[#e5e5e5] py-1.5 animate-scale-in">
+                        {idea.status !== "realized" && idea.status !== "archived" && idea.status !== "dormant" && (
+                          <button
+                            onClick={() => quickAdvanceStatus(idea)}
+                            className="flex w-full items-center gap-2 px-3 py-1.5 text-[12px] text-[#404040] hover:bg-[#f5f5f5] transition-colors"
+                          >
+                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                              <path d="m3 8 4-4 4 4"/><path d="M7 4v16"/><path d="m21 16-4 4-4-4"/><path d="M17 20V4"/>
+                            </svg>
+                            推进状态
+                          </button>
+                        )}
+                        <div className="px-3 py-1">
+                          <p className="text-[9px] font-semibold text-[#a3a3a3] uppercase tracking-[0.06em] mb-1">重要程度</p>
+                          <div className="flex items-center gap-1">
+                            {IMPORTANCE_CONFIG.map(c => (
+                              <button
+                                key={c.value}
+                                onClick={() => quickSetImportance(idea.id, c.value)}
+                                className={`flex h-5 w-5 items-center justify-center rounded-full transition-all ${
+                                  idea.importance === c.value ? `${c.bg} ring-1 ${c.ring}` : "bg-[#fafafa] ring-1 ring-[#f0f0f0] hover:ring-[#e5e5e5]"
+                                }`}
+                                title={c.label}
+                              >
+                                <span className={`h-1.5 w-1.5 rounded-full ${c.dot}`} />
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                        {idea.status !== "archived" && (
+                          <button
+                            onClick={() => quickArchive(idea)}
+                            className="flex w-full items-center gap-2 px-3 py-1.5 text-[12px] text-rose-600 hover:bg-rose-50 transition-colors border-t border-[#f0f0f0] mt-1"
+                          >
+                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                              <path d="M19 14c1.49-1.46 3-3.21 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.76 0-3 .5-4.5 1.5-1.5-1-2.74-1.5-4.5-1.5A5.5 5.5 0 0 0 2 8.5c0 2.3 1.5 4.05 3 5.5l7 7Z"/>
+                            </svg>
+                            归档
+                          </button>
+                        )}
+                      </div>
+                    )}
                     <div className="flex items-start justify-between gap-3">
                       <div className="min-w-0 flex-1">
                         <div className="flex items-center gap-2">
@@ -706,8 +998,22 @@ export default function HomePage() {
                               {idea.collection}
                             </span>
                           )}
+                          {emotionInfo && (
+                            <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[9px] font-medium ring-1 shrink-0 ${emotionInfo.bg} ${emotionInfo.text} ${emotionInfo.ring}`}>
+                              <span className={`h-1 w-1 rounded-full ${emotionInfo.dot}`} />
+                              {emotionInfo.label}
+                            </span>
+                          )}
                         </div>
-                        {idea.content && (
+                        {isSealed ? (
+                          <p className="mt-1 inline-flex items-center gap-1 text-[11px] text-violet-500 font-medium">
+                            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                              <rect width="18" height="11" x="3" y="11" rx="2" ry="2"/>
+                              <path d="M7 11V7a5 5 0 0 1 10 0v4"/>
+                            </svg>
+                            {capsuleDays} 天后解锁
+                          </p>
+                        ) : idea.content && (
                           <p className="mt-1 text-[12px] text-[#737373] leading-relaxed line-clamp-2">{truncate(idea.content, 120)}</p>
                         )}
                         <div className="mt-1.5 flex items-center gap-1.5 text-[11px] text-[#a3a3a3]">
@@ -717,12 +1023,20 @@ export default function HomePage() {
                           {formatRelativeTime(idea.created_at)}
                         </div>
                       </div>
-                      <div className="flex shrink-0 items-center gap-1.5 rounded-full ring-1 ring-[#e5e5e5] px-2.5 py-1">
-                        <span className={`h-1.5 w-1.5 rounded-full ${s.dot}`} />
-                        <span className="text-[10px] font-medium text-[#737373]">{s.label}</span>
+                      <div className="flex shrink-0 flex-col items-end gap-1.5">
+                        {idea.importance > 0 && (
+                          <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[9px] font-medium ring-1 ${ic?.bg} ${ic?.text} ${ic?.ring}`}>
+                            <span className={`h-1 w-1 rounded-full ${ic?.dot}`} />
+                            {impLabel}
+                          </span>
+                        )}
+                        <div className="flex items-center gap-1.5 rounded-full ring-1 ring-[#e5e5e5] px-2.5 py-1">
+                          <span className={`h-1.5 w-1.5 rounded-full ${s.dot}`} />
+                          <span className="text-[10px] font-medium text-[#737373]">{s.label}</span>
+                        </div>
                       </div>
                     </div>
-                  </button>
+                  </div>
                 </div>
               );
             })}

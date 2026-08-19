@@ -6,6 +6,7 @@ import { MarkdownPreview } from "@/components/markdown";
 
 interface Idea {
   id: string; title: string; content: string; status: string;
+  importance: number;
   created_at: string; updated_at: string; last_reviewed_at: string | null;
 }
 

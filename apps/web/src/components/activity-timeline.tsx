@@ -14,6 +14,7 @@ interface Activity {
 const ACTIVITY_CONFIG: Record<string, { label: string; color: string }> = {
   capture:       { label: "捕获",   color: "text-amber-500" },
   status_change: { label: "状态变更", color: "text-sky-500" },
+  importance_change: { label: "重要程度", color: "text-orange-500" },
   note:          { label: "笔记",   color: "text-emerald-500" },
   research:      { label: "调研",   color: "text-violet-500" },
   discussion:    { label: "讨论",   color: "text-blue-500" },
@@ -36,6 +37,12 @@ function ActivityIcon({ type, size = 14 }: { type: string; size?: number }) {
       return (
         <svg width={s} height={s} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
           <polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/>
+        </svg>
+      );
+    case "importance_change":
+      return (
+        <svg width={s} height={s} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M4 15l4-8 4 8"/><path d="M4 15h8"/><path d="M12 15l4-8 4 8"/><path d="M12 15h8"/>
         </svg>
       );
     case "note":
@@ -91,10 +98,25 @@ export default function ActivityTimeline({ ideaId }: { ideaId: string }) {
   const [showTypePicker, setShowTypePicker] = useState(false);
   const [saving, setSaving] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
+  const typePickerRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const handleClick = (e: MouseEvent) => {
+      if (typePickerRef.current && !typePickerRef.current.contains(e.target as Node)) {
+        setShowTypePicker(false);
+      }
+    };
+    document.addEventListener("mousedown", handleClick);
+    return () => document.removeEventListener("mousedown", handleClick);
+  }, []);
 
   const loadActivities = async () => {
-    const r = await fetch(`/api/ideas/${ideaId}/activities`);
-    if (r.ok) setActivities(await r.json());
+    try {
+      const r = await fetch(`/api/ideas/${ideaId}/activities`);
+      if (r.ok) setActivities(await r.json());
+    } catch {
+      // network error, show empty timeline
+    }
     setLoading(false);
   };
 
@@ -103,15 +125,19 @@ export default function ActivityTimeline({ ideaId }: { ideaId: string }) {
   const saveActivity = async () => {
     if (!input.trim()) return;
     setSaving(true);
-    await fetch(`/api/ideas/${ideaId}/activities`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ type: selectedType, content: input.trim() }),
-    });
-    setInput("");
-    setSelectedType("general");
-    setShowTypePicker(false);
-    loadActivities();
+    try {
+      await fetch(`/api/ideas/${ideaId}/activities`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ type: selectedType, content: input.trim() }),
+      });
+      setInput("");
+      setSelectedType("general");
+      setShowTypePicker(false);
+      loadActivities();
+    } catch {
+      // network error, keep input so user can retry
+    }
     setSaving(false);
     inputRef.current?.focus();
   };
@@ -128,7 +154,7 @@ export default function ActivityTimeline({ ideaId }: { ideaId: string }) {
     }
   };
 
-  const typeOptions = Object.entries(ACTIVITY_CONFIG).filter(([k]) => k !== "capture" && k !== "status_change");
+  const typeOptions = Object.entries(ACTIVITY_CONFIG).filter(([k]) => k !== "capture" && k !== "status_change" && k !== "importance_change");
 
   return (
     <div>
@@ -189,7 +215,7 @@ export default function ActivityTimeline({ ideaId }: { ideaId: string }) {
       <div className="mt-4 pt-3 border-t border-[#f0f0f0]">
         <div className="flex items-start gap-2">
           {/* Type selector */}
-          <div className="relative shrink-0">
+          <div ref={typePickerRef} className="relative shrink-0">
             <button
               onClick={() => setShowTypePicker(!showTypePicker)}
               className="flex h-7 w-7 items-center justify-center rounded-md border border-[#e5e5e5] bg-white hover:bg-[#fafafa] transition-colors"
