@@ -3,15 +3,8 @@
 import { useState, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { formatRelativeTime } from "@spark/utils";
-
-interface Idea {
-  id: string; title: string; content: string; status: string;
-  collection: string; importance: number;
-  emotion: string | null;
-  created_at: string; updated_at: string; last_reviewed_at: string | null;
-}
-
-interface ApiResponse { ideas: Idea[]; total: number; page: number; pageSize: number; }
+import { getCollectionStyle, IMPORTANCE_CONFIG, STATUS_BY_VALUE, EMOTION_BY_VALUE } from "@/lib/config";
+import type { Idea, ApiResponse } from "@/lib/types";
 
 interface BlindSpotResult {
   topicBlindSpots: string[];
@@ -19,45 +12,6 @@ interface BlindSpotResult {
   emotionBlindSpots: string[];
   promptSuggestions: string[];
   exploredDomains: string[];
-}
-
-const STATUS_LABELS: Record<string, string> = {
-  seed: "种子", sprout: "萌芽", growing: "生长中",
-  realized: "已实现", archived: "已归档", dormant: "休眠",
-};
-
-const STATUS_COLORS: Record<string, string> = {
-  seed: "bg-amber-400", sprout: "bg-emerald-400", growing: "bg-sky-400",
-  realized: "bg-violet-400", archived: "bg-neutral-400", dormant: "bg-stone-400",
-};
-
-const EMOTION_LABELS: Record<string, string> = {
-  excited: "兴奋", curious: "好奇", anxious: "焦虑", calm: "平静", confused: "困惑", none: "未标记",
-};
-
-const EMOTION_COLORS: Record<string, string> = {
-  excited: "bg-rose-400", curious: "bg-amber-400", anxious: "bg-orange-400",
-  calm: "bg-sky-400", confused: "bg-violet-400", none: "bg-neutral-300",
-};
-
-const IMPORTANCE_LABELS = ["未评级", "灵感碎片", "有意思", "想做", "必做"];
-const IMPORTANCE_COLORS = ["bg-neutral-300", "bg-slate-400", "bg-amber-400", "bg-orange-500", "bg-rose-500"];
-
-const COLLECTION_PALETTE = [
-  { bg: "bg-amber-50", text: "text-amber-700", dot: "bg-amber-400" },
-  { bg: "bg-emerald-50", text: "text-emerald-700", dot: "bg-emerald-400" },
-  { bg: "bg-sky-50", text: "text-sky-700", dot: "bg-sky-400" },
-  { bg: "bg-rose-50", text: "text-rose-700", dot: "bg-rose-400" },
-  { bg: "bg-violet-50", text: "text-violet-700", dot: "bg-violet-400" },
-  { bg: "bg-orange-50", text: "text-orange-700", dot: "bg-orange-400" },
-  { bg: "bg-teal-50", text: "text-teal-700", dot: "bg-teal-400" },
-  { bg: "bg-pink-50", text: "text-pink-700", dot: "bg-pink-400" },
-];
-
-function getCollectionStyle(name: string) {
-  let hash = 0;
-  for (let i = 0; i < name.length; i++) hash = ((hash << 5) - hash) + name.charCodeAt(i);
-  return COLLECTION_PALETTE[Math.abs(hash) % COLLECTION_PALETTE.length];
 }
 
 const DAY = 86400000;
@@ -303,18 +257,18 @@ export default function RhythmPage() {
       <section className="mb-6">
         <h2 className="mb-3 text-[12px] font-semibold text-[#737373]">重要程度分布</h2>
         <div className="rounded-[10px] bg-white p-4 ring-1 ring-[#e5e5e5] space-y-2">
-          {IMPORTANCE_LABELS.map((label, i) => {
+          {IMPORTANCE_CONFIG.map((c, i) => {
             const count = stats.byImportance[i] || 0;
             const pct = stats.total > 0 ? (count / stats.total) * 100 : 0;
             return (
               <div key={i} className="flex items-center gap-3">
                 <div className="flex w-16 items-center gap-1.5">
-                  <span className={"h-2 w-2 rounded-full " + IMPORTANCE_COLORS[i]} />
-                  <span className="text-[11px] text-[#737373]">{label}</span>
+                  <span className={"h-2 w-2 rounded-full " + c.dot} />
+                  <span className="text-[11px] text-[#737373]">{c.label}</span>
                 </div>
                 <div className="flex-1">
                   <div className="h-4 rounded bg-[#f5f5f5] overflow-hidden">
-                    <div className={"h-full rounded " + IMPORTANCE_COLORS[i]} style={{ width: pct + "%" }} />
+                    <div className={"h-full rounded " + c.dot} style={{ width: pct + "%" }} />
                   </div>
                 </div>
                 <span className="w-8 text-right text-[11px] text-[#a3a3a3] tabular-nums">{count}</span>
@@ -331,8 +285,8 @@ export default function RhythmPage() {
           <div className="flex flex-wrap gap-2">
             {Object.entries(stats.byStatus).map(([status, count]) => (
               <div key={status} className="flex items-center gap-1.5 rounded-lg bg-[#fafafa] px-2.5 py-1.5 ring-1 ring-[#f0f0f0]">
-                <span className={"h-2 w-2 rounded-full " + (STATUS_COLORS[status] || "bg-neutral-400")} />
-                <span className="text-[11px] text-[#525252]">{STATUS_LABELS[status] || status}</span>
+                <span className={"h-2 w-2 rounded-full " + (STATUS_BY_VALUE[status]?.dot ?? "bg-neutral-400")} />
+                <span className="text-[11px] text-[#525252]">{STATUS_BY_VALUE[status]?.label ?? status}</span>
                 <span className="text-[11px] font-medium text-[#a3a3a3] tabular-nums">{count}</span>
               </div>
             ))}
@@ -372,8 +326,8 @@ export default function RhythmPage() {
           <div className="flex flex-wrap gap-2">
             {Object.entries(stats.byEmotion).map(([emotion, count]) => (
               <div key={emotion} className="flex items-center gap-1.5 rounded-lg bg-[#fafafa] px-2.5 py-1.5 ring-1 ring-[#f0f0f0]">
-                <span className={"h-2 w-2 rounded-full " + (EMOTION_COLORS[emotion] || "bg-neutral-300")} />
-                <span className="text-[11px] text-[#525252]">{EMOTION_LABELS[emotion] || emotion}</span>
+                <span className={"h-2 w-2 rounded-full " + (EMOTION_BY_VALUE[emotion]?.dot ?? "bg-neutral-300")} />
+                <span className="text-[11px] text-[#525252]">{emotion === "none" ? "未标记" : (EMOTION_BY_VALUE[emotion]?.label ?? emotion)}</span>
                 <span className="text-[11px] font-medium text-[#a3a3a3] tabular-nums">{count}</span>
               </div>
             ))}

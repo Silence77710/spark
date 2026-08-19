@@ -6,10 +6,10 @@ import { DEFAULT_IMPORTANCE_LEVELS, type ImportanceLevel } from "@spark/utils";
 
 const IMPORTANCE_STYLES = [
   { value: 0, dot: "bg-neutral-300",  text: "text-neutral-500",  bg: "bg-neutral-50",  ring: "ring-neutral-200/50" },
-  { value: 1, dot: "bg-slate-400",    text: "text-slate-600",    bg: "bg-slate-50",    ring: "ring-slate-200/50" },
+  { value: 1, dot: "bg-amber-200",    text: "text-amber-700",    bg: "bg-amber-50",    ring: "ring-amber-200/50" },
   { value: 2, dot: "bg-amber-400",    text: "text-amber-700",    bg: "bg-amber-50",    ring: "ring-amber-200/50" },
-  { value: 3, dot: "bg-orange-500",   text: "text-orange-700",   bg: "bg-orange-50",   ring: "ring-orange-200/50" },
-  { value: 4, dot: "bg-rose-500",     text: "text-rose-700",     bg: "bg-rose-50",     ring: "ring-rose-200/50" },
+  { value: 3, dot: "bg-amber-600",    text: "text-amber-700",    bg: "bg-amber-50",    ring: "ring-amber-200/50" },
+  { value: 4, dot: "bg-amber-800",    text: "text-amber-800",    bg: "bg-amber-50",    ring: "ring-amber-300/50" },
 ];
 
 interface AiFeatureConfig {

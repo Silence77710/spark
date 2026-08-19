@@ -19,6 +19,13 @@
 - 产品定位、版本范围、设计哲学变化 → 更新 PRODUCT.md
 - 提交前自检：对照 `git diff`，凡涉及上述行为的，确认对应文档已同步
 
+## 代码组织（硬规则）
+
+- **单文件长度**：单文件代码超过 400 行必须评估拆分；超过 600 行禁止合入。页面组件只做状态编排与组合，展示单元拆到 `apps/web/src/components/`，可复用逻辑收进 `apps/web/src/hooks/`，纯函数与常量收进 `apps/web/src/lib/`。
+- **按功能点拆分**：一个文件只承担一个功能点；新增功能优先新建文件，不往已有大文件里追加。
+- **共享配置唯一定义**：跨页面使用的常量、色彩映射、枚举配置只允许在 `apps/web/src/lib/config.ts` 定义一次，其他文件 import 使用，禁止复制副本。
+- **提交前自检**：对本次触碰过的文件执行 `wc -l`，超标必须当场拆分，不留"以后再说"。
+
 ## 规范引用
  
  本规范遵循 PSES（Personal Software Engineering Standard）。
@@ -113,6 +120,8 @@
 
 数据库为本机 `spark-mysql` Docker 容器（MySQL 8，端口 3306）中的 `spark` 库。连接配置见 `packages/@spark/db`，默认 `127.0.0.1:3306`，可用环境变量 `MYSQL_HOST` / `MYSQL_PORT` / `MYSQL_USER` / `MYSQL_PASSWORD` / `MYSQL_DATABASE` 覆盖。
 
+AI 功能（思考伙伴）通过 OpenAI 兼容接口调用，需在 `apps/web/.env.local` 配置 `AI_API_KEY`（必需，无硬编码兜底）、`AI_BASE_URL`、`AI_MODEL`，模板见根目录 `.env.example`；未配置时 AI 功能静默降级不可用，其余功能不受影响。上游对并发请求限流（429），所有 AI 调用经 `packages/@spark/ai` 的进程内串行队列发出，并自动重试（429/5xx/网络错误最多 2 次），因此多个 AI 功能同时触发时后发的请求会排队等待，属正常现象。
+
 ```bash
 # 本地开发
 pnpm install
@@ -125,6 +134,7 @@ docker exec -i spark-mysql mysql -uroot -pspark123 < packages/@spark/db/schema.s
 docker build -t spark-web:local .
 docker run -d --name spark-web -p 3000:3000 \
   -e MYSQL_HOST=host.docker.internal \
+  -e AI_API_KEY=<your-key> \
   spark-web:local
 ```
 
@@ -139,6 +149,11 @@ docker run -d --name spark-web -p 3000:3000 \
 ├── Dockerfile             # 本地镜像构建（生产运行）
  ├── apps/                  # 应用
  │   └── web/               # Next.js 主应用
+ │       └── src/
+ │           ├── app/       # 页面与 API 路由（/ /explore /graph /kanban /rhythm /retro /graveyard /profile /settings /ideas/[id]）
+│           ├── components/ # 列表页组件（site-header / capture-box / filter-bar / idea-card / idea-list / ai-panels / daily-review / home-sidebar）与通用组件（markdown / activity-timeline / bloodline / ui）
+ │           ├── hooks/     # 客户端 Hooks（use-outside-click / use-ai-companion）
+ │           └── lib/       # 共享配置与纯函数（config.ts 为展示配置唯一定义处 / types.ts / group-ideas.ts）
  ├── packages/              # 共享包
 │   └── @spark/            # 共享模块
 │       ├── utils/         # 工具函数

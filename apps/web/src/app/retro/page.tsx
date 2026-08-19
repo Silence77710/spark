@@ -4,38 +4,13 @@ import { useState, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { formatRelativeTime } from "@spark/utils";
 import { MarkdownPreview } from "@/components/markdown";
-
-interface Idea {
-  id: string; title: string; content: string; status: string;
-  collection: string; importance: number;
-  is_capsule: boolean; unlock_at: string | null;
-  epitaph: string | null; emotion: string | null;
-  created_at: string; updated_at: string; last_reviewed_at: string | null;
-}
+import { STATUS_BY_VALUE, IMPORTANCE_BY_VALUE } from "@/lib/config";
+import type { Idea, ApiResponse } from "@/lib/types";
 
 interface Relationship {
   id: string; source_id: string; target_id: string; type: string;
   created_by: string; created_at: string; ai_explanation: string | null;
 }
-
-interface ApiResponse { ideas: Idea[]; total: number; page: number; pageSize: number; }
-
-const STATUS_CONFIG: Record<string, { label: string; dot: string; text: string; bg: string }> = {
-  seed:     { label: "种子",   dot: "bg-amber-400",   text: "text-amber-700",   bg: "bg-amber-50" },
-  sprout:   { label: "萌芽",   dot: "bg-emerald-400", text: "text-emerald-700", bg: "bg-emerald-50" },
-  growing:  { label: "生长中", dot: "bg-sky-400",     text: "text-sky-700",     bg: "bg-sky-50" },
-  realized: { label: "已实现", dot: "bg-violet-400",  text: "text-violet-700",  bg: "bg-violet-50" },
-  archived: { label: "已归档", dot: "bg-neutral-400", text: "text-neutral-500", bg: "bg-neutral-50" },
-  dormant:  { label: "休眠",   dot: "bg-stone-400",   text: "text-stone-500",   bg: "bg-stone-50" },
-};
-
-const IMPORTANCE_CONFIG: Record<number, { label: string; dot: string; text: string }> = {
-  0: { label: "未评级",   dot: "bg-neutral-300", text: "text-neutral-500" },
-  1: { label: "灵感碎片", dot: "bg-slate-400",   text: "text-slate-600" },
-  2: { label: "有意思",   dot: "bg-amber-400",   text: "text-amber-700" },
-  3: { label: "想做",     dot: "bg-orange-500",  text: "text-orange-700" },
-  4: { label: "必做",     dot: "bg-rose-500",    text: "text-rose-700" },
-};
 
 const DAY = 86400000;
 
@@ -179,8 +154,8 @@ export default function RetroPage() {
               <div className="space-y-3">
                 {visibleFlashcards.map(idea => {
                   const isFlipped = flipped.has(idea.id);
-                  const stCfg = STATUS_CONFIG[idea.status] ?? STATUS_CONFIG.seed;
-                  const impCfg = IMPORTANCE_CONFIG[idea.importance] ?? IMPORTANCE_CONFIG[0];
+                  const stCfg = STATUS_BY_VALUE[idea.status] ?? STATUS_BY_VALUE.seed;
+                  const impCfg = IMPORTANCE_BY_VALUE[idea.importance] ?? IMPORTANCE_BY_VALUE[0];
                   const ageDays = Math.floor(daysSince(idea.created_at));
 
                   return (
@@ -323,7 +298,7 @@ export default function RetroPage() {
             ) : (
               <div className="space-y-2">
                 {forgotten.slice(0, 10).map(idea => {
-                  const stCfg = STATUS_CONFIG[idea.status] ?? STATUS_CONFIG.seed;
+                  const stCfg = STATUS_BY_VALUE[idea.status] ?? STATUS_BY_VALUE.seed;
                   const days = Math.floor(daysSince(idea.last_reviewed_at));
                   return (
                     <button

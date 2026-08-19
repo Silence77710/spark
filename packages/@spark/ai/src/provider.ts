@@ -21,30 +21,81 @@ export interface ChatResult {
   tokensUsed: number | null;
 }
 
+// 进程内串行队列：上游（tokens.store）对并发请求限流返回 429，
+// 同一时刻只允许一个请求打到上游，其余排队等待。
+// 挂在 globalThis 上：Next.js 会为每个 route 打包独立模块实例，需跨实例共享
+const g = globalThis as { __sparkAiQueue?: Promise<unknown> };
+g.__sparkAiQueue ??= Promise.resolve();
+function enqueue<T>(fn: () => Promise<T>): Promise<T> {
+  const run = g.__sparkAiQueue!.then(fn, fn);
+  g.__sparkAiQueue = run.catch(() => {});
+  return run;
+}
+
 export function getAiConfig() {
+  const apiKey = process.env.AI_API_KEY;
+  if (!apiKey) {
+    throw new Error("AI_API_KEY 未配置：请在 apps/web/.env.local 中设置（参考 .env.example）");
+  }
   return {
     baseUrl: process.env.AI_BASE_URL ?? DEFAULT_BASE_URL,
-    apiKey: process.env.AI_API_KEY ?? "ek-xxx",
+    apiKey,
     model: process.env.AI_MODEL ?? DEFAULT_MODEL,
   };
 }
 
 export async function chatCompletion(opts: ChatOptions): Promise<ChatResult> {
   const { baseUrl, apiKey, model } = getAiConfig();
+  return enqueue(() => requestWithRetry(baseUrl, apiKey, model, opts));
+}
 
-  const resp = await fetch(`${baseUrl}/chat/completions`, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${apiKey}`,
-    },
-    body: JSON.stringify({
-      model: opts.model ?? model,
-      messages: opts.messages,
-      temperature: opts.temperature ?? 0.8,
-      max_tokens: opts.maxTokens ?? 4000,
-    }),
-  });
+async function requestWithRetry(
+  baseUrl: string,
+  apiKey: string,
+  model: string,
+  opts: ChatOptions,
+): Promise<ChatResult> {
+  // 上游偶发限流/超时，对网络错误与 429/5xx 重试最多 2 次
+  // 429 的限流窗口较长，退避 5s、15s（优先尊重 Retry-After 头）；其余 1s、3s
+  const MAX_ATTEMPTS = 3;
+  let resp: Response | null = null;
+  let lastError: unknown = null;
+  let lastStatus = 0;
+  for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+    try {
+      resp = await fetch(`${baseUrl}/chat/completions`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${apiKey}`,
+        },
+        body: JSON.stringify({
+          model: opts.model ?? model,
+          messages: opts.messages,
+          temperature: opts.temperature ?? 0.8,
+          max_tokens: opts.maxTokens ?? 4000,
+        }),
+      });
+      if (resp.ok || (resp.status !== 429 && resp.status < 500)) break;
+      lastStatus = resp.status;
+      lastError = new Error(`AI API error ${resp.status}`);
+      resp = null;
+    } catch (err) {
+      lastStatus = 0;
+      lastError = err;
+      resp = null;
+    }
+    if (attempt < MAX_ATTEMPTS) {
+      const fallbackMs = lastStatus === 429
+        ? (attempt === 1 ? 5000 : 15000)
+        : (attempt === 1 ? 1000 : 3000);
+      await new Promise(r => setTimeout(r, fallbackMs));
+    }
+  }
+
+  if (!resp) {
+    throw lastError instanceof Error ? lastError : new Error(String(lastError));
+  }
 
   if (!resp.ok) {
     const text = await resp.text().catch(() => "");

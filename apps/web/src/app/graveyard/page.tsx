@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { formatRelativeTime } from "@spark/utils";
+import { STATUS_MAP } from "@/lib/config";
 
 interface Idea {
   id: string; title: string; content: string | null; status: string;
@@ -10,11 +11,6 @@ interface Idea {
   is_capsule: boolean; unlock_at: string | null; epitaph: string | null;
   created_at: string; updated_at: string; last_reviewed_at: string | null;
 }
-
-const STATUS_LABELS: Record<string, { label: string; dot: string }> = {
-  archived: { label: "已归档", dot: "bg-neutral-400" },
-  dormant: { label: "休眠", dot: "bg-stone-400" },
-};
 
 interface CoronerReport {
   patterns: string[];
@@ -197,7 +193,7 @@ export default function GraveyardPage() {
       ) : (
         <div className="space-y-2">
           {ideas.map((idea, i) => {
-            const st = STATUS_LABELS[idea.status] ?? STATUS_LABELS.archived;
+            const st = STATUS_MAP[idea.status] ?? STATUS_MAP.archived;
             return (
               <div key={idea.id} className="animate-slide-up" style={{ animationDelay: `${i * 30}ms` }}>
                 <button

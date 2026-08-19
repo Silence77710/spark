@@ -2,17 +2,9 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
-import { formatRelativeTime, truncate } from "@spark/utils";
-
-interface Idea {
-  id: string; title: string; content: string; status: string;
-  collection: string; importance: number;
-  is_capsule: boolean; unlock_at: string | null;
-  emotion: string | null;
-  created_at: string; updated_at: string; last_reviewed_at: string | null;
-}
-
-interface ApiResponse { ideas: Idea[]; total: number; page: number; pageSize: number; }
+import { formatRelativeTime, stripMarkdown, truncate } from "@spark/utils";
+import { getCollectionStyle, IMPORTANCE_BY_VALUE } from "@/lib/config";
+import type { Idea, ApiResponse } from "@/lib/types";
 
 const COLUMNS = [
   { key: "seed",     label: "种子",   dot: "bg-amber-400",   header: "text-amber-700",   bg: "bg-amber-50/50",   ring: "ring-amber-200/40" },
@@ -22,27 +14,6 @@ const COLUMNS = [
 ];
 
 const COLUMN_KEYS = COLUMNS.map(c => c.key);
-
-const IMPORTANCE_DOTS: Record<number, string> = {
-  0: "bg-neutral-300", 1: "bg-slate-400", 2: "bg-amber-400", 3: "bg-orange-500", 4: "bg-rose-500",
-};
-
-const COLLECTION_PALETTE = [
-  { bg: "bg-amber-50", text: "text-amber-700", ring: "ring-amber-200/50", dot: "bg-amber-400" },
-  { bg: "bg-emerald-50", text: "text-emerald-700", ring: "ring-emerald-200/50", dot: "bg-emerald-400" },
-  { bg: "bg-sky-50", text: "text-sky-700", ring: "ring-sky-200/50", dot: "bg-sky-400" },
-  { bg: "bg-rose-50", text: "text-rose-700", ring: "ring-rose-200/50", dot: "bg-rose-400" },
-  { bg: "bg-violet-50", text: "text-violet-700", ring: "ring-violet-200/50", dot: "bg-violet-400" },
-  { bg: "bg-orange-50", text: "text-orange-700", ring: "ring-orange-200/50", dot: "bg-orange-400" },
-  { bg: "bg-teal-50", text: "text-teal-700", ring: "ring-teal-200/50", dot: "bg-teal-400" },
-  { bg: "bg-pink-50", text: "text-pink-700", ring: "ring-pink-200/50", dot: "bg-pink-400" },
-];
-
-function getCollectionStyle(name: string) {
-  let hash = 0;
-  for (let i = 0; i < name.length; i++) hash = ((hash << 5) - hash) + name.charCodeAt(i);
-  return COLLECTION_PALETTE[Math.abs(hash) % COLLECTION_PALETTE.length];
-}
 
 export default function KanbanPage() {
   const router = useRouter();
@@ -129,7 +100,7 @@ export default function KanbanPage() {
                     </div>
                   ) : (
                     colIdeas.map(idea => {
-                      const impDot = IMPORTANCE_DOTS[idea.importance] ?? IMPORTANCE_DOTS[0];
+                      const impDot = (IMPORTANCE_BY_VALUE[idea.importance] ?? IMPORTANCE_BY_VALUE[0]).dot;
                       const colStyle = idea.collection ? getCollectionStyle(idea.collection) : null;
                       return (
                         <div
@@ -144,7 +115,7 @@ export default function KanbanPage() {
                               {idea.title}
                             </p>
                             {idea.content && (
-                              <p className="mt-1 text-[11px] text-[#a3a3a3] line-clamp-1">{truncate(idea.content, 60)}</p>
+                              <p className="mt-1 text-[11px] text-[#a3a3a3] line-clamp-1">{truncate(stripMarkdown(idea.content), 60)}</p>
                             )}
                           </button>
                           <div className="mt-2 flex items-center justify-between">

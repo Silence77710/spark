@@ -46,7 +46,8 @@ export async function POST(request: NextRequest) {
     } finally {
       releaseDb(conn);
     }
-  } catch {
+  } catch (err) {
+    console.error("[ai/connect] request failed:", err);
     return NextResponse.json({ pairs: [], error: "AI unavailable" }, { status: 200 });
   }
 }

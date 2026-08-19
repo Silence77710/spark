@@ -82,7 +82,8 @@ export async function POST(request: NextRequest) {
     } finally {
       releaseDb(conn);
     }
-  } catch {
+  } catch (err) {
+    console.error("[ai/mirror] request failed:", err);
     return NextResponse.json({ insights: [], error: "AI unavailable" }, { status: 200 });
   }
 }

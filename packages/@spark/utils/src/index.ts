@@ -22,6 +22,28 @@ export function truncate(str: string, len: number): string {
   return str.slice(0, len) + "...";
 }
 
+// 把 Markdown 原文剥成纯文本，供列表/回顾等单行预览使用；
+// 与 truncate 组合：truncate(stripMarkdown(content), n)
+export function stripMarkdown(md: string): string {
+  return md
+    .replace(/```[\s\S]*?```/g, " ")           // 代码块
+    .replace(/`([^`]*)`/g, "$1")               // 行内代码
+    .replace(/!\[([^\]]*)\]\([^)]*\)/g, "$1")  // 图片保留 alt
+    .replace(/\[([^\]]*)\]\([^)]*\)/g, "$1")   // 链接保留文字
+    .replace(/\[\[([^\]]+)\]\]/g, "$1")        // wiki 链接
+    .replace(/^#{1,6}\s+/gm, "")               // 标题
+    .replace(/^\s*>\s?/gm, "")                 // 引用
+    .replace(/^\s*[-*+]\s+/gm, "")             // 无序列表
+    .replace(/^\s*\d+\.\s+/gm, "")             // 有序列表
+    .replace(/^\s*(?:[-*_]\s*){3,}$/gm, " ")   // 分割线
+    .replace(/(\*\*|__)(.*?)\1/g, "$2")        // 粗体
+    .replace(/(\*|_)(.*?)\1/g, "$2")           // 斜体
+    .replace(/~~(.*?)~~/g, "$1")               // 删除线
+    .replace(/<[^>]+>/g, " ")                  // HTML 标签
+    .replace(/\s+/g, " ")                      // 压缩空白
+    .trim();
+}
+
 export function generateId(): string {
   return crypto.randomUUID();
 }

@@ -29,7 +29,8 @@ export async function POST(request: NextRequest) {
     } catch { /* best-effort logging */ }
 
     return NextResponse.json({ challenges });
-  } catch {
+  } catch (err) {
+    console.error("[ai/devil] request failed:", err);
     return NextResponse.json({ challenges: [], error: "AI unavailable" }, { status: 200 });
   }
 }

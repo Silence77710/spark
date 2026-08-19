@@ -44,7 +44,8 @@ export async function POST(request: NextRequest) {
     } catch { /* best-effort logging */ }
 
     return NextResponse.json({ result });
-  } catch {
+  } catch (err) {
+    console.error("[ai/translate] request failed:", err);
     return NextResponse.json({ result: null, error: "AI unavailable" }, { status: 200 });
   }
 }

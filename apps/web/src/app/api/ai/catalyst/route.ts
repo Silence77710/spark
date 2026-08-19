@@ -33,11 +33,15 @@ export async function POST(_request: NextRequest) {
         );
       } catch { /* best-effort logging */ }
 
-      return NextResponse.json({ pair });
+      // 区分「没选到配对」（解析失败/无合适组合）与「AI 异常」，前端据此显示不同提示
+      return NextResponse.json(pair
+        ? { pair }
+        : { pair: null, message: "AI 这次没选到合适的配对，换一批想法再试试" });
     } finally {
       releaseDb(conn);
     }
-  } catch {
+  } catch (err) {
+    console.error("[ai/catalyst] request failed:", err);
     return NextResponse.json({ pair: null, error: "AI unavailable" }, { status: 200 });
   }
 }

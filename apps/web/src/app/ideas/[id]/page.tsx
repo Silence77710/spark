@@ -5,59 +5,8 @@ import { useRouter } from "next/navigation";
 import { formatRelativeTime, DEFAULT_IMPORTANCE_LEVELS, type ImportanceLevel } from "@spark/utils";
 import { MarkdownPreview } from "@/components/markdown";
 import ActivityTimeline from "@/components/activity-timeline";
-
-interface Idea {
-  id: string; title: string; content: string; status: string;
-  collection: string;
-  importance: number;
-  is_capsule: boolean;
-  unlock_at: string | null;
- epitaph: string | null;
- emotion: string | null;
- created_at: string; updated_at: string; last_reviewed_at: string | null;
-}
-
-const STATUSES = [
-  { value: "seed",     label: "种子",   dot: "bg-amber-400",  text: "text-amber-700", bg: "bg-amber-50" },
-  { value: "sprout",   label: "萌芽",   dot: "bg-emerald-400",text: "text-emerald-700", bg: "bg-emerald-50" },
-  { value: "growing",  label: "生长中", dot: "bg-sky-400",    text: "text-sky-700", bg: "bg-sky-50" },
-  { value: "realized", label: "已实现", dot: "bg-violet-400", text: "text-violet-700", bg: "bg-violet-50" },
-  { value: "archived", label: "已归档", dot: "bg-neutral-400",text: "text-neutral-500", bg: "bg-neutral-50" },
-  { value: "dormant",  label: "休眠",   dot: "bg-stone-400",  text: "text-stone-500", bg: "bg-stone-50" },
-];
-
-const IMPORTANCE_CONFIG = [
-  { value: 0, label: "未评级",   dot: "bg-neutral-300",  text: "text-neutral-500",  bg: "bg-neutral-50",  ring: "ring-neutral-200/50" },
-  { value: 1, label: "灵感碎片", dot: "bg-slate-400",    text: "text-slate-600",    bg: "bg-slate-50",    ring: "ring-slate-200/50" },
-  { value: 2, label: "有意思",   dot: "bg-amber-400",    text: "text-amber-700",    bg: "bg-amber-50",    ring: "ring-amber-200/50" },
-  { value: 3, label: "想做",     dot: "bg-orange-500",   text: "text-orange-700",   bg: "bg-orange-50",   ring: "ring-orange-200/50" },
-  { value: 4, label: "必做",     dot: "bg-rose-500",     text: "text-rose-700",     bg: "bg-rose-50",     ring: "ring-rose-200/50" },
-];
-
-const EMOTION_CONFIG = [
-  { value: "excited",  label: "兴奋", dot: "bg-rose-400",    text: "text-rose-700",    bg: "bg-rose-50",    ring: "ring-rose-200/50" },
-  { value: "curious",  label: "好奇", dot: "bg-amber-400",   text: "text-amber-700",   bg: "bg-amber-50",   ring: "ring-amber-200/50" },
-  { value: "anxious",  label: "焦虑", dot: "bg-orange-400",  text: "text-orange-700",  bg: "bg-orange-50",  ring: "ring-orange-200/50" },
-  { value: "calm",     label: "平静", dot: "bg-sky-400",     text: "text-sky-700",     bg: "bg-sky-50",     ring: "ring-sky-200/50" },
-  { value: "confused", label: "困惑", dot: "bg-violet-400", text: "text-violet-700",  bg: "bg-violet-50",  ring: "ring-violet-200/50" },
-];
-
-const COLLECTION_PALETTE = [
-  { bg: "bg-amber-50", text: "text-amber-700", ring: "ring-amber-200/50", dot: "bg-amber-400" },
-  { bg: "bg-emerald-50", text: "text-emerald-700", ring: "ring-emerald-200/50", dot: "bg-emerald-400" },
-  { bg: "bg-sky-50", text: "text-sky-700", ring: "ring-sky-200/50", dot: "bg-sky-400" },
-  { bg: "bg-rose-50", text: "text-rose-700", ring: "ring-rose-200/50", dot: "bg-rose-400" },
-  { bg: "bg-violet-50", text: "text-violet-700", ring: "ring-violet-200/50", dot: "bg-violet-400" },
-  { bg: "bg-orange-50", text: "text-orange-700", ring: "ring-orange-200/50", dot: "bg-orange-400" },
-  { bg: "bg-teal-50", text: "text-teal-700", ring: "ring-teal-200/50", dot: "bg-teal-400" },
-  { bg: "bg-pink-50", text: "text-pink-700", ring: "ring-pink-200/50", dot: "bg-pink-400" },
-];
-
-function getCollectionStyle(name: string) {
-  let hash = 0;
-  for (let i = 0; i < name.length; i++) hash = ((hash << 5) - hash) + name.charCodeAt(i);
-  return COLLECTION_PALETTE[Math.abs(hash) % COLLECTION_PALETTE.length];
-}
+import { STATUS_CONFIG, IMPORTANCE_CONFIG, EMOTION_CONFIG, getCollectionStyle } from "@/lib/config";
+import type { Idea } from "@/lib/types";
 
 export default function IdeaDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
@@ -404,7 +353,7 @@ const handleDelete = async () => {
     </div>
   );
 
- const cur = STATUSES.find(s => s.value === idea.status) ?? STATUSES[0];
+ const cur = STATUS_CONFIG.find(s => s.value === idea.status) ?? STATUS_CONFIG[0];
   const curImp = IMPORTANCE_CONFIG.find(c => c.value === idea.importance) ?? IMPORTANCE_CONFIG[0];
  const curImpLabel = importanceLabels.find(l => l.value === idea.importance)?.label ?? curImp.label;
 
@@ -497,7 +446,7 @@ const isSealed = !!idea.is_capsule && !!idea.unlock_at && new Date(idea.unlock_a
                 </button>
                 {statusOpen && (
                   <div className="absolute top-full left-0 mt-1.5 w-36 rounded-[8px] bg-white shadow-lg ring-1 ring-[#e5e5e5] z-10 py-1 animate-scale-in">
-                    {STATUSES.map(s => (
+                    {STATUS_CONFIG.map(s => (
                       <button
                         key={s.value}
                         onClick={() => changeStatus(s.value)}
@@ -995,7 +944,7 @@ const isSealed = !!idea.is_capsule && !!idea.unlock_at && new Date(idea.unlock_a
                   <path d="M5 12h14"/><path d="M12 5l7 7-7 7"/>
                 </svg>
                 <span className="text-[12px] text-[#404040] group-hover:text-amber-600 transition-colors truncate">{bl.title}</span>
-                <span className={`h-1.5 w-1.5 rounded-full shrink-0 ml-auto ${(STATUSES.find(s => s.value === bl.status) ?? STATUSES[0]).dot}`} />
+                <span className={`h-1.5 w-1.5 rounded-full shrink-0 ml-auto ${(STATUS_CONFIG.find(s => s.value === bl.status) ?? STATUS_CONFIG[0]).dot}`} />
               </button>
             ))}
           </div>

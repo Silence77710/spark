@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import * as d3 from "d3";
+import { STATUS_CONFIG, STATUS_MAP } from "@/lib/config";
 
 interface Idea {
   id: string; title: string; status: string; importance: number;
@@ -26,11 +27,6 @@ const STATUS_COLORS: Record<string, string> = {
   seed: "#f59e0b", sprout: "#10b981", growing: "#0ea5e9",
   realized: "#8b5cf6", archived: "#a3a3a3", dormant: "#78716c",
 };
-const STATUS_LABELS: Record<string, string> = {
-  seed: "种子", sprout: "萌芽", growing: "生长中",
-  realized: "已实现", archived: "已归档", dormant: "休眠",
-};
-
 const REL_STYLES: Record<string, { stroke: string; dash: string; width: number; label: string }> = {
   related: { stroke: "#d4d4d4", dash: "none", width: 1.5, label: "相关" },
   conflict: { stroke: "#ef4444", dash: "4 3", width: 1.5, label: "冲突" },
@@ -200,7 +196,7 @@ export default function GraphPage() {
     nodeSel
       .on("mouseenter", (_event, d) => {
         const color = STATUS_COLORS[d.status] ?? "#a3a3a3";
-        const label = STATUS_LABELS[d.status] ?? d.status;
+        const label = STATUS_MAP[d.status]?.label ?? d.status;
         tooltip.style("opacity", 1).html(
           `<div style="display:flex;align-items:center;gap:6px;margin-bottom:2px">` +
           `<span style="display:inline-block;height:8px;width:8px;border-radius:50%;background:${color}"></span>` +
@@ -297,7 +293,7 @@ export default function GraphPage() {
         <div className="mb-4 rounded-[10px] bg-[#fafafa] p-3 ring-1 ring-[#f0f0f0] animate-slide-down">
           <div className="mb-2.5">
             <span className="text-[10px] font-semibold text-[#a3a3a3] uppercase tracking-[0.06em] mr-2">状态</span>
-            {Object.entries(STATUS_LABELS).map(([val, label]) => (
+            {STATUS_CONFIG.map(({ value: val, label }) => (
               <button
                 key={val}
                 onClick={() => toggleStatus(val)}
@@ -362,7 +358,7 @@ export default function GraphPage() {
 
       {/* Legend */}
       <div className="mt-4 flex flex-wrap items-center gap-x-4 gap-y-1.5">
-        {Object.entries(STATUS_LABELS).map(([val, label]) => (
+        {STATUS_CONFIG.map(({ value: val, label }) => (
           <div key={val} className="flex items-center gap-1.5">
             <span className="h-2 w-2 rounded-full" style={{ background: STATUS_COLORS[val] }} />
             <span className="text-[10px] text-[#a3a3a3]">{label}</span>

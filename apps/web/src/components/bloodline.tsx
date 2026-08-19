@@ -26,11 +26,6 @@ interface BloodlineEvent {
   iconColor: string;
 }
 
-const STATUS_LABELS: Record<string, string> = {
-  seed: "种子", sprout: "萌芽", growing: "生长中",
-  realized: "已实现", archived: "已归档", dormant: "休眠",
-};
-
 const ACTIVITY_LABELS: Record<string, string> = {
   capture: "捕获", status_change: "状态变更", importance_change: "调整重要程度",
   note: "笔记", research: "调研", discussion: "讨论",

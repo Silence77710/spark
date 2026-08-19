@@ -41,7 +41,8 @@ export async function POST(request: NextRequest) {
     } finally {
       releaseDb(conn);
     }
-  } catch {
+  } catch (err) {
+    console.error("[ai/coroner] request failed:", err);
     return NextResponse.json({ report: null, error: "AI unavailable" }, { status: 200 });
   }
 }

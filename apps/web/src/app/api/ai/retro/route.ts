@@ -66,7 +66,8 @@ export async function POST(request: NextRequest) {
     } finally {
       releaseDb(conn);
     }
-  } catch {
+  } catch (err) {
+    console.error("[ai/retro] request failed:", err);
     return NextResponse.json({ reply: null, error: "AI unavailable" }, { status: 200 });
   }
 }

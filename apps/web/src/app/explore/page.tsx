@@ -2,16 +2,9 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
-import { formatRelativeTime, truncate } from "@spark/utils";
-
-interface Idea {
-  id: string; title: string; content: string; status: string;
-  collection: string; importance: number;
-  is_capsule: boolean; unlock_at: string | null;
-  created_at: string; updated_at: string; last_reviewed_at: string | null;
-}
-
-interface ApiResponse { ideas: Idea[]; total: number; page: number; pageSize: number; }
+import { formatRelativeTime, stripMarkdown, truncate } from "@spark/utils";
+import { getCollectionStyle, IMPORTANCE_BY_VALUE, STATUS_MAP } from "@/lib/config";
+import type { Idea, ApiResponse } from "@/lib/types";
 
 interface SemanticResult {
   id: string;
@@ -23,32 +16,6 @@ interface SemanticResult {
   created_at: string;
   reason: string;
   score: number;
-}
-
-const STATUS_LABELS: Record<string, string> = {
-  seed: "种子", sprout: "萌芽", growing: "生长中",
-  realized: "已实现", archived: "已归档", dormant: "休眠",
-};
-
-const IMPORTANCE_DOTS: Record<number, string> = {
-  0: "bg-neutral-300", 1: "bg-slate-400", 2: "bg-amber-400", 3: "bg-orange-500", 4: "bg-rose-500",
-};
-
-const COLLECTION_PALETTE = [
-  { bg: "bg-amber-50", text: "text-amber-700", dot: "bg-amber-400" },
-  { bg: "bg-emerald-50", text: "text-emerald-700", dot: "bg-emerald-400" },
-  { bg: "bg-sky-50", text: "text-sky-700", dot: "bg-sky-400" },
-  { bg: "bg-rose-50", text: "text-rose-700", dot: "bg-rose-400" },
-  { bg: "bg-violet-50", text: "text-violet-700", dot: "bg-violet-400" },
-  { bg: "bg-orange-50", text: "text-orange-700", dot: "bg-orange-400" },
-  { bg: "bg-teal-50", text: "text-teal-700", dot: "bg-teal-400" },
-  { bg: "bg-pink-50", text: "text-pink-700", dot: "bg-pink-400" },
-];
-
-function getCollectionStyle(name: string) {
-  let hash = 0;
-  for (let i = 0; i < name.length; i++) hash = ((hash << 5) - hash) + name.charCodeAt(i);
-  return COLLECTION_PALETTE[Math.abs(hash) % COLLECTION_PALETTE.length];
 }
 
 export default function ExplorePage() {
@@ -97,7 +64,7 @@ export default function ExplorePage() {
         if (aiRes.ok) {
           const aiData = await aiRes.json();
           if (aiData.results && aiData.results.length > 0) {
-            const resultMap = new Map(aiData.results.map((r: any) => [r.id, r]));
+            const resultMap = new Map<string, { reason?: string; score?: number }>(aiData.results.map((r: any) => [r.id, r]));
             setResults(ideas
               .filter(i => resultMap.has(i.id))
               .map(i => {
@@ -105,7 +72,7 @@ export default function ExplorePage() {
                 return {
                   id: i.id, title: i.title, content: i.content || "", status: i.status,
                   collection: i.collection, importance: i.importance, created_at: i.created_at,
-                  reason: ai.reason || "语义相关", score: ai.score || 0,
+                  reason: ai?.reason || "语义相关", score: ai?.score || 0,
                 };
               })
               .sort((a, b) => b.score - a.score)
@@ -213,7 +180,7 @@ export default function ExplorePage() {
         <div className="space-y-2">
           <p className="mb-3 text-[11px] text-[#a3a3a3]">{results.length} 条结果</p>
           {results.map(idea => {
-            const impDot = IMPORTANCE_DOTS[idea.importance] ?? IMPORTANCE_DOTS[0];
+            const impDot = (IMPORTANCE_BY_VALUE[idea.importance] ?? IMPORTANCE_BY_VALUE[0]).dot;
             const colStyle = idea.collection ? getCollectionStyle(idea.collection) : null;
             return (
               <button
@@ -227,7 +194,7 @@ export default function ExplorePage() {
                       {idea.title}
                     </p>
                     {idea.content && (
-                      <p className="mt-1 text-[11px] text-[#a3a3a3] line-clamp-2">{truncate(idea.content, 100)}</p>
+                      <p className="mt-1 text-[11px] text-[#a3a3a3] line-clamp-2">{truncate(stripMarkdown(idea.content), 100)}</p>
                     )}
                   </div>
                   {mode === "semantic" && idea.score > 0 && (
@@ -246,7 +213,7 @@ export default function ExplorePage() {
                       {idea.collection}
                     </span>
                   )}
-                  <span className="text-[10px] text-[#a3a3a3]">{STATUS_LABELS[idea.status] || idea.status}</span>
+                  <span className="text-[10px] text-[#a3a3a3]">{STATUS_MAP[idea.status]?.label || idea.status}</span>
                   <span className="text-[10px] text-[#d4d4d4]">{formatRelativeTime(idea.created_at)}</span>
                 </div>
               </button>

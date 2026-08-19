@@ -44,6 +44,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ question });
   } catch (err) {
     // Silent degradation — return empty so frontend can skip
+    console.error("[ai/socratic] request failed:", err);
     return NextResponse.json({ question: null, error: "AI unavailable" }, { status: 200 });
   }
 }
