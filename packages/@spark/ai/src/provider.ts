@@ -2,7 +2,8 @@
 // Designed to work with any OpenAI-compatible endpoint (OpenAI, tokens.store, local models, etc.)
 
 const DEFAULT_BASE_URL = "https://tokens.store/v1";
-const DEFAULT_MODEL = "deepseek-v4-flash-0731";
+// 带日期的快照别名（deepseek-v4-flash-0731）在中转站已下架渠道，默认用滚动别名
+const DEFAULT_MODEL = "deepseek-v4-flash";
 
 export interface ChatMessage {
   role: "system" | "user" | "assistant";

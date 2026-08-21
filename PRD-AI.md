@@ -10,9 +10,9 @@
 |------|------|
 | 项目名称 | Spark — 想法操作系统 · AI 助手模块 |
 | 产品经理 | Codex (Senior PM) |
-| 版本 | v1.1 |
-| 日期 | 2026-08-18 |
-| 状态 | Active（P0+P1 已实现；v1.1 修复苏格拉底触发条件与 PRD.md v3.0 对齐） |
+| 版本 | v1.2 |
+| 日期 | 2026-08-21 |
+| 状态 | Active（P0+P1 已实现；v1.2 新增 Epic 8 AI 全方位分析，确认后存档 + 历史回看） |
 | 关联文档 | PRODUCT.md / SPEC.md |
 
 ---
@@ -214,6 +214,27 @@ AI 在 Spark 中的角色边界：
 
 ---
 
+### Epic 8: AI 全方位分析（Idea Analyzer）
+
+```
+作为创作者
+我想要 AI 从多个角度解剖一个想法，并把每次分析存档对比
+以便 看清想法的假设、问题、时机与下一步，追踪自己思考的演变
+```
+
+**验收标准：**
+
+- [x] 详情页提供「全方位分析这个想法」入口（AI 总开关 + analyzer 分开关开启，且想法非归档/蛰伏/密封）
+- [x] AI 从 5 个固定维度输出：核心假设 / 问题与对象 / 时机 / 最小下一步 / 生长方向
+- [x] 每个维度 = 一段镜子式分析（≤3 句）+ 一句苏格拉底式追问（不赞美、不替用户做决定）
+- [x] 每个追问可直接回答，回答以 note 类型记入动态时间线
+- [x] 分析结果默认不落库；用户点「保存分析」确认后才写入 idea_analyses
+- [x] 同一想法可保存多份分析，形成历史记录
+- [x] 分析历史在详情页可回看（折叠列表，点开展开只读全文）
+- [x] AI 不可用时静默降级（提示稍后再试 + 重试），不阻塞页面
+
+---
+
 ## 5. 功能需求
 
 ### P0 — Must Have（V1 尾 / V2 早）✅ 已实现
@@ -233,6 +254,7 @@ AI 在 Spark 中的角色边界：
 | F06 | 想法杂交台 | 首页杂交台区域 + AI 挑选配对 + 碰撞生成新 idea | E3 | 3d |
 | F07 | AI 回望对话 | 胶囊解锁后的多轮对话 + 上下文注入 + 反思存档 | E4 | 2d |
 | F08 | AI 隐私控制 | 设置页可选择哪些 AI 功能开启；显示数据发送日志 | 全局 | 1d |
+| F12 | AI 全方位分析 | 详情页五维解剖（分析+追问），确认后存档，历史可回看 | E8 | 2d |
 
 ### P2 — Could Have（V3）
 
@@ -383,6 +405,23 @@ AI 在 Spark 中的角色边界：
 
 ---
 
+### 7.7 AI 全方位分析
+
+```
+用户打开想法详情页
+  -> 点击「全方位分析这个想法」（AI 开启且 analyzer 功能开启时显示）
+  -> POST /api/ai/analyze 传 idea 标题/内容/状态/重要程度/创建时间
+  -> AI 返回 5 个维度（核心假设/问题与对象/时机/最小下一步/生长方向），
+     每个维度 = 分析 + 追问
+  -> 结果仅展示，不写库
+  -> 用户可逐条回答追问 -> 存为 note 活动（含原追问）
+  -> 用户点「保存分析」-> POST /api/ideas/[id]/analyses 写入 idea_analyses
+  -> 同一想法可多次保存；「分析历史」折叠列表按时间倒序展示，点开展开只读全文
+  -> AI 不可用时返回 analysis: null，前端提示稍后再试 + 重试按钮
+```
+
+---
+
 ## 8. 数据模型变更
 
 ### ideas 表新增字段
@@ -412,12 +451,25 @@ AI 在 Spark 中的角色边界：
 | 字段 | 类型 | 约束 | 说明 |
 |------|------|------|------|
 | id | VARCHAR(36) | PK | 唯一标识 |
-| feature | VARCHAR(30) | NOT NULL | 功能：socratic / connector / catalyst / retro / mirror |
+| feature | VARCHAR(30) | NOT NULL | 功能：socratic / connector / catalyst / retro / mirror / devil / translate / analyzer 等 |
 | idea_id | VARCHAR(36) NULL | FK -> ideas.id | 关联的 idea（如有） |
 | request_summary | VARCHAR(200) NULL | 请求摘要（不含完整内容） |
 | response_summary | VARCHAR(500) NULL | 响应摘要 |
 | tokens_used | INT NULL | token 消耗 |
 | created_at | DATETIME(3) | NOT NULL | 交互时间 |
+
+### 新增 idea_analyses 表
+
+| 字段 | 类型 | 约束 | 说明 |
+|------|------|------|------|
+| id | VARCHAR(36) | PK | 唯一标识 |
+| idea_id | VARCHAR(36) | NOT NULL，索引（无外键） | 被分析的 idea |
+| dimensions | JSON | NOT NULL | 五维分析结果：[{key, title, analysis, question}] |
+| model | VARCHAR(50) NULL | 生成所用模型名 |
+| tokens_used | INT NULL | token 消耗 |
+| created_at | DATETIME(3) | NOT NULL | 保存时间 |
+
+> 只在用户点「保存分析」后写入；同一 idea_id 可有多行，构成分析历史。
 
 ### settings 表新增键
 
@@ -558,4 +610,4 @@ API 路由：
 
 ---
 
-*文档版本：v1.0 · 2026-08-18 · 状态：Active（P0+P1 全部实现）*
+*文档版本：v1.2 · 2026-08-21 · 状态：Active（P0+P1 全部实现，新增 F12 AI 全方位分析）*

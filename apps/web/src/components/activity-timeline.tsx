@@ -90,7 +90,7 @@ function ActivityIcon({ type, size = 14 }: { type: string; size?: number }) {
   }
 }
 
-export default function ActivityTimeline({ ideaId }: { ideaId: string }) {
+export default function ActivityTimeline({ ideaId, refreshKey }: { ideaId: string; refreshKey?: number }) {
   const [activities, setActivities] = useState<Activity[]>([]);
   const [loading, setLoading] = useState(true);
   const [input, setInput] = useState("");
@@ -120,7 +120,7 @@ export default function ActivityTimeline({ ideaId }: { ideaId: string }) {
     setLoading(false);
   };
 
-  useEffect(() => { loadActivities(); }, [ideaId]);
+  useEffect(() => { loadActivities(); }, [ideaId, refreshKey]);
 
   const saveActivity = async () => {
     if (!input.trim()) return;
@@ -161,7 +161,7 @@ export default function ActivityTimeline({ ideaId }: { ideaId: string }) {
       {/* Section header */}
       <div className="flex items-center gap-2 mb-3">
         <div className="h-px flex-1 bg-[#f0f0f0]" />
-        <span className="text-[10px] font-semibold text-[#a3a3a3] uppercase tracking-[0.06em]">活动时间线</span>
+        <span className="text-[11px] font-semibold text-[#a3a3a3] uppercase tracking-[0.06em]">活动时间线</span>
         <div className="h-px flex-1 bg-[#f0f0f0]" />
       </div>
 
@@ -180,8 +180,8 @@ export default function ActivityTimeline({ ideaId }: { ideaId: string }) {
         </div>
       ) : activities.length === 0 ? (
         <div className="py-6 text-center">
-          <p className="text-[12px] text-[#a3a3a3]">暂无活动记录</p>
-          <p className="text-[11px] text-[#d4d4d4] mt-1">写下你对此想法做了什么</p>
+          <p className="text-[13px] text-[#a3a3a3]">暂无活动记录</p>
+          <p className="text-[12px] text-[#d4d4d4] mt-1">写下你对此想法做了什么</p>
         </div>
       ) : (
         <div className="relative">
@@ -198,10 +198,10 @@ export default function ActivityTimeline({ ideaId }: { ideaId: string }) {
                   </div>
                   {/* Content */}
                   <div className="min-w-0 flex-1 pt-0.5">
-                    <p className="text-[12px] text-[#171717] leading-relaxed">{a.content}</p>
+                    <p className="text-[13px] text-[#171717] leading-relaxed">{a.content}</p>
                     <div className="mt-0.5 flex items-center gap-2">
-                      <span className="text-[10px] text-[#a3a3a3]">{formatRelativeTime(a.created_at)}</span>
-                      <span className={`text-[10px] font-medium ${cfg.color}`}>{cfg.label}</span>
+                      <span className="text-[11px] text-[#a3a3a3]">{formatRelativeTime(a.created_at)}</span>
+                      <span className={`text-[11px] font-medium ${cfg.color}`}>{cfg.label}</span>
                     </div>
                   </div>
                 </div>
@@ -218,7 +218,7 @@ export default function ActivityTimeline({ ideaId }: { ideaId: string }) {
           <div ref={typePickerRef} className="relative shrink-0">
             <button
               onClick={() => setShowTypePicker(!showTypePicker)}
-              className="flex h-7 w-7 items-center justify-center rounded-md border border-[#e5e5e5] bg-white hover:bg-[#fafafa] transition-colors"
+              className="flex h-8 w-8 items-center justify-center rounded-md border border-[#e5e5e5] bg-white hover:bg-[#fafafa] transition-colors"
               title={ACTIVITY_CONFIG[selectedType]?.label ?? "一般"}
             >
               <span className={ACTIVITY_CONFIG[selectedType]?.color ?? "text-neutral-400"}>
@@ -231,7 +231,7 @@ export default function ActivityTimeline({ ideaId }: { ideaId: string }) {
                   <button
                     key={key}
                     onClick={() => { setSelectedType(key); setShowTypePicker(false); }}
-                    className={`flex w-full items-center gap-2 px-3 py-1.5 text-[11px] hover:bg-[#f5f5f5] transition-colors ${key === selectedType ? "bg-amber-50/50" : ""}`}
+                    className={`flex w-full items-center gap-2 px-3 py-1.5 text-[12px] hover:bg-[#f5f5f5] transition-colors ${key === selectedType ? "bg-amber-50/50" : ""}`}
                   >
                     <span className={cfg.color}><ActivityIcon type={key} size={11} /></span>
                     <span className="text-[#171717]">{cfg.label}</span>
@@ -254,12 +254,12 @@ export default function ActivityTimeline({ ideaId }: { ideaId: string }) {
               value={input}
               onChange={e => setInput(e.target.value)}
               onKeyDown={handleKeyDown}
-              className="h-7 flex-1 rounded-md border border-[#e5e5e5] bg-white px-2.5 text-[12px] text-[#171717] placeholder:text-[#a3a3a3] transition-all focus:outline-none focus:border-amber-300 focus:ring-1 focus:ring-amber-200/50"
+              className="h-8 flex-1 rounded-md border border-[#e5e5e5] bg-white px-2.5 text-[13px] text-[#171717] placeholder:text-[#a3a3a3] transition-all focus:outline-none focus:border-amber-300 focus:ring-1 focus:ring-amber-200/50"
             />
             <button
               onClick={saveActivity}
               disabled={saving || !input.trim()}
-              className="inline-flex h-7 w-7 items-center justify-center rounded-md bg-amber-500 text-white shadow-sm hover:bg-amber-600 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+              className="inline-flex h-8 w-8 items-center justify-center rounded-md bg-amber-500 text-white shadow-sm hover:bg-amber-600 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
               title="记录活动"
             >
               <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
@@ -268,9 +268,9 @@ export default function ActivityTimeline({ ideaId }: { ideaId: string }) {
             </button>
           </div>
         </div>
-        <div className="mt-1.5 text-[10px] text-[#a3a3a3]">
-          <kbd className="inline-flex h-4 w-4 items-center justify-center rounded border border-[#e5e5e5] bg-[#fafafa] text-[9px] font-medium text-[#737373]">⌘</kbd>
-          <kbd className="ml-0.5 inline-flex h-4 w-4 items-center justify-center rounded border border-[#e5e5e5] bg-[#fafafa] text-[9px] font-medium text-[#737373]">↵</kbd>
+        <div className="mt-1.5 text-[11px] text-[#a3a3a3]">
+          <kbd className="inline-flex h-4 w-4 items-center justify-center rounded border border-[#e5e5e5] bg-[#fafafa] text-[10px] font-medium text-[#737373]">⌘</kbd>
+          <kbd className="ml-0.5 inline-flex h-4 w-4 items-center justify-center rounded border border-[#e5e5e5] bg-[#fafafa] text-[10px] font-medium text-[#737373]">↵</kbd>
           <span className="ml-1">发送</span>
         </div>
       </div>

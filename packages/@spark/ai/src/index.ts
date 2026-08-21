@@ -9,3 +9,4 @@ export { generateCoronerReport, type CoronerReport, type DeceasedIdea } from "./
 export { translateCrossDomain, type CrossDomainResult } from "./translator";
 export { detectBlindSpots, type BlindSpotResult, type IdeaSummary } from "./blindspot";
 export { generateThinkingProfile, type ThinkingProfile, type ProfileStats } from "./profile";
+export { analyzeIdea, type AnalysisDimension, type AnalysisResult, type AnalyzeIdeaInput } from "./analyzer";

@@ -64,6 +64,20 @@ CREATE TABLE IF NOT EXISTS ai_interactions (
 -- 按想法查询 AI 交互的索引
 CREATE INDEX idx_ai_interactions_idea_id ON ai_interactions(idea_id);
 
+-- 想法全方位分析存档表（用户确认后才保存，同一想法可存多份）
+-- 与 ai_interactions / idea_relationships 一致：不加外键，只用索引
+--（线上库 ideas 表为 utf8mb4_0900_ai_ci，与本文件声明的 unicode_ci 不一致，加外键会报 3780）
+CREATE TABLE IF NOT EXISTS idea_analyses (
+  id          VARCHAR(36)  NOT NULL,
+  idea_id     VARCHAR(36)  NOT NULL,
+  dimensions  JSON         NOT NULL,
+  model       VARCHAR(100) NULL,
+  tokens_used INT          NULL,
+  created_at  DATETIME(3)  NOT NULL,
+  PRIMARY KEY (id),
+  INDEX idx_idea_analyses_idea_id (idea_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
 -- 想法关联表（AI 连接器 + 手动关联）
 CREATE TABLE IF NOT EXISTS idea_relationships (
   id              VARCHAR(36)  NOT NULL,

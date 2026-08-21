@@ -7,7 +7,7 @@ import {
 } from "@spark/utils";
 
 const DEFAULT_AI_FEATURES = { socratic: true, connector: true, catalyst: true, retro: true };
-const DEFAULT_AI_FEATURES_FULL = { ...DEFAULT_AI_FEATURES, mirror: true, devil: true, coroner: true, translate: true };
+const DEFAULT_AI_FEATURES_FULL = { ...DEFAULT_AI_FEATURES, mirror: true, devil: true, coroner: true, translate: true, analyzer: true };
 
 // GET /api/settings — 返回所有设置，缺失项用默认值填充
 export async function GET() {

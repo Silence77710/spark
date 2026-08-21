@@ -62,6 +62,16 @@ export interface AiInteractionRow {
  created_at: string;
 }
 
+export interface IdeaAnalysisRow {
+  id: string;
+  idea_id: string;
+  // JSON 列；mysql2 可能返回已解析的对象，调用方需兼容 string | 已解析数组两种情况
+  dimensions: unknown;
+  model: string | null;
+  tokens_used: number | null;
+  created_at: string;
+}
+
 export interface IdeaRelationshipRow {
   id: string;
   source_id: string;

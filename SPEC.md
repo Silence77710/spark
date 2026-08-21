@@ -2,6 +2,9 @@
  
 > 基于 PRODUCT.md，由 Codex 在 2026-08-10 完成决策与规格化。
  
+
+工程级文档（业务/接口/数据/部署/变更）见 [`docs/`](./docs/概览.md)；本文档聚焦「做什么」，`docs/` 聚焦「怎么交付」。
+
 ---
  
  ## 一、项目结构
@@ -70,24 +73,38 @@
  
  | 字段 | 类型 | 约束 | 说明 |
  |------|------|------|------|
- | id | VARCHAR(36) | PK | 唯一标识 |
- | feature | VARCHAR(30) | NOT NULL | 功能：socratic / connector / catalyst / retro / mirror |
- | idea_id | VARCHAR(36) | NULL | 关联的 idea（索引 idx_ai_interactions_idea_id） |
+| id | VARCHAR(36) | PK | 唯一标识 |
+| feature | VARCHAR(30) | NOT NULL | 功能：socratic / connector / catalyst / retro / mirror / devil / translate / analyzer 等 |
+| idea_id | VARCHAR(36) | NULL | 关联的 idea（索引 idx_ai_interactions_idea_id） |
  | request_summary | VARCHAR(200) | NULL | 请求摘要（不含完整内容） |
  | response_summary | VARCHAR(500) | NULL | 响应摘要 |
- | tokens_used | INT | NULL | token 消耗 |
- | created_at | DATETIME(3) | NOT NULL | 交互时间 |
- 
- ### settings 表
+| tokens_used | INT | NULL | token 消耗 |
+| created_at | DATETIME(3) | NOT NULL | 交互时间 |
+
+### idea_analyses 表
+
+| 字段 | 类型 | 约束 | 说明 |
+|------|------|------|------|
+| id | VARCHAR(36) | PK | 唯一标识 |
+| idea_id | VARCHAR(36) | NOT NULL，索引（无外键约束） | 被分析的 idea |
+| dimensions | JSON | NOT NULL | 五维分析结果：[{key, title, analysis, question, answer?}]（answer 为用户对追问的回答） |
+| model | VARCHAR(50) | NULL | 生成所用模型名 |
+| tokens_used | INT | NULL | token 消耗 |
+| created_at | DATETIME(3) | NOT NULL | 保存时间 |
+
+只在用户点「保存分析」确认后写入；同一 idea_id 可有多行，构成分析历史（详见 6.5）。
+
+### settings 表
  
  | 字段 | 类型 | 约束 | 说明 |
  |------|------|------|------|
  | key | VARCHAR(100) | PK | 设置项键名 |
  | value | TEXT | | 设置项值（JSON） |
  
- 当前支持的键：
- - `importance_levels` — 自定义重要程度等级名称和描述（JSON 数组，5 项）
- - `ai_enabled` — AI 助手总开关（boolean，默认 false）
+当前支持的键：
+- `importance_levels` — 自定义重要程度等级名称和描述（JSON 数组，5 项）
+- `ai_enabled` — AI 助手总开关（boolean，默认 false）
+- `ai_features` — AI 分功能开关（JSON 对象，键含 socratic / connector / catalyst / retro / mirror / devil / coroner / translate / analyzer，默认均 true）
  
  ---
  
@@ -133,6 +150,8 @@
  ### 3.3 想法详情页
  
  - **路由**：`/ideas/[id]`
+ - **桌面端布局**（lg 及以上）：容器 max-w-[1120px] 双栏——Header 卡片通栏（标题/时间/编辑删除），下方左侧主内容卡（正文、墓志铭、关联、AI 面板，纵跨两行），右侧 320px 侧栏（元数据卡：状态/重要程度/集合/情绪竖排 + 活动时间线卡）；移动端纵向单列，顺序为元数据 → 内容 → 时间线
+ - **字号**：正文 15px，标题 18px，辅助文本 11–13px（2026-08-21 整体上调，保证桌面端可读性）
  - **展示**：标题、正文（Markdown 渲染）、状态、创建/更新时间
  - **密封胶囊展示**：is_capsule 且未到 unlock_at 时，只显示标题 + 密封状态 + 倒计时，隐藏正文和时间线；解锁后正常展示
  - **操作**：
@@ -142,14 +161,20 @@
  - **编辑模式**：标题和内容可编辑，保存后回到详情页
  - **返回**：返回列表页
  
- **活动时间线**：详情页底部展示活动时间线，包含：
+**活动时间线**：详情页展示活动时间线（移动端在内容之后，桌面端在右侧栏），包含：
    - 自动记录：捕获活动、状态变更活动、重要程度变更活动
    - 手动记录：通过底部输入框添加，可选活动类型（笔记/调研/讨论/原型/决策/参考/一般）
    - 时间线按时间倒序排列，每条显示类型图标、内容、相对时间
    - 输入框支持 ⌘+↵ 快捷发送
  
  **想法墓志铭**：详情页底部展示已有墓志铭（如有，斜体），详见 3.9
- 
+
+**关联与被引用**：内容区下方展示关联管理（添加/删除关联，类型：相关/冲突/衍生/父子；AI 建议的关联带标记）与被引用列表（内容包含 `[[本想法标题]]` 的想法）
+
+**AI 入口**（AI 总开关开启、对应分功能开启、想法非归档/蛰伏/密封时显示，详见 6.3 / 6.5）：
+  - 全方位分析（analyzer）：五维解剖 + 追问回答 + 确认存档 + 分析历史
+  - 反方辩手（devil）、跨界翻译（translate）；胶囊解锁后另有回望对话（retro）
+
  ### 3.4 基础搜索
  
  - **入口**：列表页顶部搜索框
@@ -309,13 +334,27 @@
 
 ### 6.4 AI 隐私控制（完整版）
 
-- **分功能开关**：4 个功能独立开关——socratic / connector / catalyst / retro
+- **分功能开关**：各功能独立开关——socratic / connector / catalyst / retro / mirror / devil / coroner / translate / analyzer
 - **数据发送日志**：设置页显示最近 20 条 AI 交互记录（功能类型、请求摘要、时间、token 消耗）
 - **API**：
   - `GET /api/settings` 返回 `ai_features` JSON
   - `PUT /api/settings` 接受 `ai_features` 更新
   - `GET /api/ai/interactions?limit=20` 返回交互日志
 
+### 6.5 AI 全方位分析（Idea Analyzer）
+
+- **目标**：从五个固定维度解剖单个想法，照亮结构而非替用户做决定
+- **入口**：详情页「全方位分析这个想法」按钮（AI 开启且 analyzer 功能开启，想法非归档/蛰伏/密封）
+- **AI 行为**：输出 5 个维度——核心假设 / 问题与对象 / 时机 / 最小下一步 / 生长方向；每维度 = 分析（≤3 句）+ 一句追问；不赞美、不替用户做决定
+- **API**：
+  - `POST /api/ai/analyze` — 请求体 `{ idea_id, title, content, status, importance_label, created_at }`，返回 `{ analysis: { dimensions, model } }`；只生成不落库，记录 ai_interactions（feature = 'analyzer'）；AI 不可用时返回 `{ analysis: null }` 静默降级
+  - `POST /api/ideas/[id]/analyses` — 用户点「保存分析」后调用，校验 dimensions 结构后写入 idea_analyses；同一想法可存多份
+  - `GET /api/ideas/[id]/analyses` — 分析历史，按时间倒序最多 50 条
+  - `PATCH /api/ideas/[id]/analyses/[analysisId]` — 更新已存档分析的 dimensions（用于存档后补充/修改追问回答）
+- **追问回答**：每个维度的追问可直接输入回答，点「记下回答」本地锁定；回答随「保存分析」一起存入 dimensions[].answer（分析已存档时则直接 PATCH 更新该存档）；不写入动态时间线
+- **分析历史**：详情页折叠列表展示已存分析（相对时间 + 维度数 + 模型标签），点开展开只读全文（含各维度的追问与用户回答）
+- **降级**：生成失败时提示稍后再试并提供重试，不阻塞页面
+
 ---
 
-*文档版本：v1.5 · 2026-08-19（AI 调用健壮性：chatCompletion 经 globalThis 串行队列发往上游，避免并发触发 429 限流；网络错误与 429/5xx 自动重试 2 次，429 退避 5s/15s；全部 /api/ai/* 路由异常时 console.error 记录日志并静默降级；杂交台区分「未选到配对」与「AI 异常」两种提示）*
+*文档版本：v1.8 · 2026-08-21（6.5 追问回答改为随分析一起存入 dimensions[].answer，分析历史展示回答，不再写入动态时间线；新增 PATCH /api/ideas/[id]/analyses/[analysisId] 支持存档后补充回答；此前 v1.7 详情页桌面端双栏布局 + 字号上调）*

@@ -29,6 +29,7 @@ const AI_FEATURES: AiFeatureConfig[] = [
   { key: "devil", label: "反方辩手", desc: "站在想法对立面提出挑战", icon: "M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20Z M16 10l-4 4 M8 14l4-4", color: "rose" },
   { key: "coroner", label: "想法验尸官", desc: "分析放弃模式找出规律", icon: "M9 18h6 M10 22h4 M15.09 14c.18-.98.65-1.74 1.41-2.5A4.65 4.65 0 0 0 18 8 6 6 0 0 0 6 8c0 1 .23 2.23 1.5 3.5A4.61 4.61 0 0 1 8.91 14", color: "neutral" },
   { key: "translate", label: "跨界翻译", desc: "把想法翻译到另一个领域", icon: "M5 8l6 6 M4 14l6-6 M2 5h12 M7 2h1 M22 22l-5-10-5 10 M14 18h6", color: "sky" },
+  { key: "analyzer", label: "全方位分析", desc: "五维解剖想法，确认后可存档", icon: "M11 19a8 8 0 1 0 0-16 8 8 0 0 0 0 16Z M21 21l-4.3-4.3", color: "teal" },
 ];
 
 interface AiInteraction {

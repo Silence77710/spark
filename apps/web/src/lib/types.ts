@@ -29,3 +29,15 @@ export interface CatalystIdea { id: string; title: string; content: string; coll
 export interface CatalystPair { ideaA: CatalystIdea; ideaB: CatalystIdea; catalyst: string; }
 
 export interface IdeaGroup { key: string; label: string; ideas: Idea[]; }
+
+// AI 全方位分析：单个维度（分析 + 追问 + 可选的用户回答）与已存档的分析记录
+export interface AnalysisDimension { key: string; title: string; analysis: string; question: string; answer?: string; }
+
+export interface SavedAnalysis {
+  id: string;
+  idea_id: string;
+  dimensions: AnalysisDimension[];
+  model: string | null;
+  tokens_used: number | null;
+  created_at: string;
+}

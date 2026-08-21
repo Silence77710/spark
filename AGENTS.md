@@ -18,6 +18,12 @@
 - 功能规格、数据模型、交互行为变化 → 更新 SPEC.md
 - 产品定位、版本范围、设计哲学变化 → 更新 PRODUCT.md
 - 提交前自检：对照 `git diff`，凡涉及上述行为的，确认对应文档已同步
+- 接口契约（新增/修改/删除端点、参数、响应、错误码）→ 更新 `docs/接口.md`，必要时同步 `docs/数据模型.md`
+- 领域对象、状态机、核心流程变化 → 更新 `docs/业务.md`
+- 部署链路、构建参数、镜像标签、环境变量、迁移脚本变化 → 更新 `docs/部署.md`
+- 技术架构、依赖、分层、构建链路变化 → 更新 `docs/架构.md`
+- 工程级规范（rules）调整 → 更新 `docs/规范.md`
+- 每次发版或合并到主干的提交 → 追加一行到 `docs/变更日志.md`
 
 ## 代码组织（硬规则）
 
@@ -151,14 +157,16 @@ docker run -d --name spark-web -p 3000:3000 \
  │   └── web/               # Next.js 主应用
  │       └── src/
  │           ├── app/       # 页面与 API 路由（/ /explore /graph /kanban /rhythm /retro /graveyard /profile /settings /ideas/[id]）
-│           ├── components/ # 列表页组件（site-header / capture-box / filter-bar / idea-card / idea-list / ai-panels / daily-review / home-sidebar）与通用组件（markdown / activity-timeline / bloodline / ui）
+│           ├── components/ # 列表页组件（site-header / capture-box / filter-bar / idea-card / idea-list / ai-panels / daily-review / home-sidebar）、详情页组件（idea-detail/*）与通用组件（markdown / activity-timeline / bloodline / ui）
  │           ├── hooks/     # 客户端 Hooks（use-outside-click / use-ai-companion）
  │           └── lib/       # 共享配置与纯函数（config.ts 为展示配置唯一定义处 / types.ts / group-ideas.ts）
  ├── packages/              # 共享包
 │   └── @spark/            # 共享模块
 │       ├── utils/         # 工具函数
+│       ├── ai/            # AI 调用层（OpenAI 兼容接口，串行队列 + 重试；含 analyzer 等功能实现）
 │       └── db/            # 数据层（mysql2 连接池，MySQL）
 │           └── schema.sql # 数据库初始化脚本
+├── docs/                  # 工程文档（概览 / 业务 / 接口 / 数据模型 / 变更日志 / 部署 / 架构 / 规范）
 ├── .cursor/
  │   └── skills/            # 项目级 Skills
  ├── package.json
